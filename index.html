@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="TCF B2">
@@ -1429,7 +1429,7 @@ const READING = [
 const BLUE = "#0071e3";          // Apple accent blue
 const BLUE_DARK = "#0077ed";
 const INK = "#1d1d1f";           // near-black text
-const GREY = "#86868b";          // Apple secondary grey
+const GREY = "#6e6e73";          // Apple secondary grey (darkened from #86868b for WCAG 2.2 AA text contrast)
 const LINE = "#d2d2d7";          // hairline border
 const BG = "#fbfbfd";            // Apple off-white page
 const CARD = "#ffffff";
@@ -1806,13 +1806,13 @@ function App(){
     return (
       <div style={{position:"fixed",inset:0,background:BG,zIndex:50,display:"flex",flexDirection:"column",paddingTop:"env(safe-area-inset-top)"}}>
         {/* Header */}
-        <div style={{padding:"14px 18px",display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:"1px solid "+LINE,background:"rgba(255,255,255,0.82)",backdropFilter:"blur(20px)",flexShrink:0}}>
+        <header style={{padding:"14px 18px",display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:"1px solid "+LINE,background:"rgba(255,255,255,0.82)",backdropFilter:"blur(20px)",flexShrink:0}}>
           <div style={{display:"flex",alignItems:"center",gap:11}}>
             <div style={{width:34,height:34,borderRadius:11,background:"linear-gradient(155deg,#0071e3,#0058b0)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
               <SparkleIcon size={17} style={{color:"#fff"}}/>
             </div>
             <div style={{lineHeight:1.25}}>
-              <div style={{fontWeight:600,fontSize:16,letterSpacing:"-0.02em"}}>Tuteur</div>
+              <h1 style={{fontWeight:600,fontSize:16,letterSpacing:"-0.02em",margin:0}}>Tuteur</h1>
               <div style={{fontSize:12,color:busy?BLUE:GREY}}>{busy?"écrit…":"Spécialiste TCF B2"}</div>
             </div>
           </div>
@@ -1820,10 +1820,10 @@ function App(){
             {!empty&&<button className="text-btn" onClick={()=>setMsgs([])} aria-label="Nouvelle conversation" style={{background:"none",border:"none",color:GREY,padding:0,display:"flex"}}><RefreshIcon size={18}/></button>}
             <button className="text-btn" onClick={onClose} style={{background:"none",border:"none",color:BLUE,fontSize:16}}>Fermer</button>
           </div>
-        </div>
+        </header>
 
         {/* Messages / welcome */}
-        <div ref={sc} className="tutor-scroll" style={{flex:1,overflowY:"auto",padding:"20px 18px",display:"flex",flexDirection:"column",gap:14}}>
+        <main ref={sc} className="tutor-scroll" style={{flex:1,overflowY:"auto",padding:"20px 18px",display:"flex",flexDirection:"column",gap:14}}>
           {empty ? (
             <div className="fade" style={{paddingTop:8}}>
               <div style={{textAlign:"center",marginBottom:26}}>
@@ -1871,7 +1871,7 @@ function App(){
               </div>
             </div>
           )}
-        </div>
+        </main>
 
         {/* Composer */}
         <div style={{padding:"12px 14px",paddingBottom:"max(12px,env(safe-area-inset-bottom))",background:"rgba(255,255,255,0.9)",backdropFilter:"blur(20px)",borderTop:"1px solid "+LINE,flexShrink:0}}>
@@ -1893,7 +1893,7 @@ function App(){
   // ===== Settings =====
   if(showSettings){
     return (
-      <div style={{minHeight:"100vh",background:BG,padding:"max(24px,env(safe-area-inset-top)) 22px 40px"}}>
+      <main style={{minHeight:"100vh",background:BG,padding:"max(24px,env(safe-area-inset-top)) 22px 40px"}}>
         <div style={{maxWidth:600,margin:"0 auto"}} className="fade">
           <button className="text-btn" onClick={()=>setShowSettings(false)} style={{background:"none",border:"none",color:BLUE,fontSize:16,marginBottom:24,padding:0,display:"flex",alignItems:"center",gap:2}}><ChevronLeft size={18}/>Retour</button>
           <h1 style={{fontSize:34,fontWeight:600,letterSpacing:"-0.03em",margin:"0 0 6px"}}>Réglages</h1>
@@ -1941,7 +1941,7 @@ function App(){
             <button className="text-btn" onClick={()=>{ if(confirm("Supprimer toutes tes questions générées par IA ?")){ setAiBank([]); saveAiBank([]); } }} style={{background:"none",border:"none",color:RED,fontSize:14,whiteSpace:"nowrap"}}>Vider</button>
           </div>}
         </div>
-      </div>
+      </main>
     );
   }
   if(showTutor) return <TutorChat onClose={()=>setShowTutor(false)} />;
@@ -1953,12 +1953,12 @@ function App(){
     return (
       <div style={{minHeight:"100vh",background:BG}}>
         {/* Nav bar */}
-        <div style={{position:"sticky",top:0,zIndex:10,background:"rgba(251,251,253,0.8)",backdropFilter:"blur(20px)",borderBottom:"1px solid "+LINE,padding:"calc(env(safe-area-inset-top) + 12px) 22px 12px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+        <header style={{position:"sticky",top:0,zIndex:10,background:"rgba(251,251,253,0.8)",backdropFilter:"blur(20px)",borderBottom:"1px solid "+LINE,padding:"calc(env(safe-area-inset-top) + 12px) 22px 12px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
           <Wordmark/>
           <button className="text-btn" onClick={()=>setShowSettings(true)} aria-label="Réglages" style={{background:"none",border:"none",color:GREY,padding:6,display:"flex"}}><GearIcon size={22}/></button>
-        </div>
+        </header>
 
-        <div style={{maxWidth:600,margin:"0 auto",padding:"0 22px 60px"}}>
+        <main style={{maxWidth:600,margin:"0 auto",padding:"0 22px 60px"}}>
           {/* Hero */}
           <div className="fade" style={{textAlign:"center",padding:"56px 0 44px"}}>
             <div style={{fontSize:15,color:BLUE,fontWeight:600,letterSpacing:"-0.01em",marginBottom:10}}>Entraînement TCF</div>
@@ -2085,7 +2085,7 @@ function App(){
           )}
 
           {(stats.lifetimeAnswered>0||hasSession)&&<div style={{textAlign:"center",marginTop:8}}><button className="text-btn" onClick={()=>{ if(confirm("Réinitialiser toute ta progression ?")){ setStats(emptyStats); setHasSession(false); saveProgress({stats:emptyStats,session:null}); } }} style={{background:"none",border:"none",color:GREY,fontSize:14}}>Réinitialiser la progression</button></div>}
-        </div>
+        </main>
       </div>
     );
   }
@@ -2097,14 +2097,14 @@ function App(){
   if(phase==="quiz"&&mode==="ai"&&(aiLoading||!aiQuestion)){
     return (
       <div style={{minHeight:"100vh",background:BG}}>
-        <div style={{position:"sticky",top:0,zIndex:10,background:"rgba(251,251,253,0.8)",backdropFilter:"blur(20px)",borderBottom:"1px solid "+LINE,padding:"calc(env(safe-area-inset-top) + 12px) 22px 12px"}}>
+        <header style={{position:"sticky",top:0,zIndex:10,background:"rgba(251,251,253,0.8)",backdropFilter:"blur(20px)",borderBottom:"1px solid "+LINE,padding:"calc(env(safe-area-inset-top) + 12px) 22px 12px"}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",maxWidth:600,margin:"0 auto"}}>
             <button className="text-btn" onClick={()=>{setAiQuestion(null);setAiError("");setPhase("home");}} style={{background:"none",border:"none",color:BLUE,fontSize:16,padding:0,display:"flex",alignItems:"center",gap:2}}><ChevronLeft size={19}/>Accueil</button>
             <span style={{fontSize:15,color:GREY,fontWeight:500}}>Question IA</span>
             <div style={{width:20}}/>
           </div>
-        </div>
-        <div style={{maxWidth:480,margin:"0 auto",padding:"22vh 22px 60px",textAlign:"center"}}>
+        </header>
+        <main style={{maxWidth:480,margin:"0 auto",padding:"22vh 22px 60px",textAlign:"center"}}>
           {aiLoading
             ? <div className="fade">
                 <SparkleIcon size={30} style={{color:BLUE,margin:"0 auto 18px"}}/>
@@ -2115,7 +2115,7 @@ function App(){
                 <p style={{fontSize:16,color:INK,margin:"0 0 20px",lineHeight:1.5}}>{aiError||"La génération a échoué."}</p>
                 <PillButton onClick={generateAIQuestion}>Réessayer</PillButton>
               </div>}
-        </div>
+        </main>
       </div>
     );
   }
@@ -2125,16 +2125,16 @@ function App(){
     const isAI=!!aiQuestion;
     return (
       <div style={{minHeight:"100vh",background:BG}}>
-        <div style={{position:"sticky",top:0,zIndex:10,background:"rgba(251,251,253,0.8)",backdropFilter:"blur(20px)",borderBottom:"1px solid "+LINE,padding:"calc(env(safe-area-inset-top) + 12px) 22px 12px"}}>
+        <header style={{position:"sticky",top:0,zIndex:10,background:"rgba(251,251,253,0.8)",backdropFilter:"blur(20px)",borderBottom:"1px solid "+LINE,padding:"calc(env(safe-area-inset-top) + 12px) 22px 12px"}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",maxWidth:600,margin:"0 auto"}}>
             <button className="text-btn" onClick={()=>{setAiQuestion(null);setPhase("home");}} style={{background:"none",border:"none",color:BLUE,fontSize:16,padding:0,display:"flex",alignItems:"center",gap:2}}><ChevronLeft size={19}/>Accueil</button>
             <span style={{fontSize:15,color:GREY,fontWeight:500}}>{isAI?"Question IA":(current+1)+" sur "+total}</span>
             <button className="text-btn" onClick={()=>setShowTutor(true)} aria-label="Tuteur" style={{background:"none",border:"none",color:BLUE,padding:0,display:"flex"}}><MessageIcon size={20}/></button>
           </div>
           {!isAI&&<div style={{maxWidth:600,margin:"10px auto 0",height:4,background:"#e8e8ed",borderRadius:2,overflow:"hidden"}}><div style={{height:"100%",width:`${progress}%`,background:BLUE,borderRadius:2,transition:"width .3s"}}/></div>}
-        </div>
+        </header>
 
-        <div style={{maxWidth:600,margin:"0 auto",padding:"36px 22px 60px"}}>
+        <main style={{maxWidth:600,margin:"0 auto",padding:"36px 22px 60px"}}>
           <div className="fade" key={isAI?"ai":current} style={{marginBottom:30}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:10,marginBottom:16}}>
               <div style={{fontSize:13,color:BLUE,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.05em"}}>{isAI||q.aiGenerated?"Générée par IA":(q.type==="reading"?"Compréhension écrite":"Complétez")}</div>
@@ -2148,7 +2148,7 @@ function App(){
               : <div style={{fontSize:26,lineHeight:1.45,fontWeight:500,letterSpacing:"-0.02em",textAlign:"center",color:INK}}>{renderSentence(q.sentence)}</div>}
           </div>
 
-          <div style={{display:"flex",flexDirection:"column",gap:12}}>
+          <div role="radiogroup" aria-label="Choisissez une réponse" style={{display:"flex",flexDirection:"column",gap:12}}>
             {q.options.map((opt,i)=>{
               let bg=CARD,border="1px solid "+LINE,color=INK,sh="0 1px 4px rgba(0,0,0,0.04)",opacity=1;
               if(selected!==null){
@@ -2156,15 +2156,16 @@ function App(){
                 else if(i===selected){bg="#ffeceb";border="1px solid "+RED;color="#c4271f";}
                 else {bg=CARD;color=GREY;opacity=0.55;}
               } else if(selected===i){border="1px solid "+BLUE;}
-              return (<button key={i} className="opt-row" disabled={selected!==null} onClick={()=>handleSelect(i)} style={{padding:"17px 20px",borderRadius:14,border,background:bg,color,fontSize:17,fontWeight:500,textAlign:"left",display:"flex",alignItems:"center",gap:14,boxShadow:selected===null?sh:"none",letterSpacing:"-0.01em",opacity}}>
-                <span style={{width:26,height:26,borderRadius:"50%",border:selected!==null&&(i===q.correct||i===selected)?"none":"1.5px solid "+LINE,background:selected!==null&&i===q.correct?GREEN:selected!==null&&i===selected?RED:"transparent",color:selected!==null&&(i===q.correct||i===selected)?"#fff":GREY,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:600,flexShrink:0}}>{selected!==null&&i===q.correct?<CheckIcon size={14} stroke={3}/>:selected!==null&&i===selected?<XIcon size={14} stroke={3}/>:["A","B","C","D"][i]}</span>
+              const badgeLabel=selected!==null&&i===q.correct?"Bonne réponse":(selected!==null&&i===selected?"Réponse incorrecte":undefined);
+              return (<button key={i} className="opt-row" role="radio" aria-checked={selected===i} disabled={selected!==null} onClick={()=>handleSelect(i)} style={{padding:"17px 20px",borderRadius:14,border,background:bg,color,fontSize:17,fontWeight:500,textAlign:"left",display:"flex",alignItems:"center",gap:14,boxShadow:selected===null?sh:"none",letterSpacing:"-0.01em",opacity}}>
+                <span aria-label={badgeLabel} style={{width:26,height:26,borderRadius:"50%",border:selected!==null&&(i===q.correct||i===selected)?"none":"1.5px solid "+LINE,background:selected!==null&&i===q.correct?GREEN:selected!==null&&i===selected?RED:"transparent",color:selected!==null&&(i===q.correct||i===selected)?"#fff":GREY,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:600,flexShrink:0}}>{selected!==null&&i===q.correct?<CheckIcon size={14} stroke={3} aria-hidden="true"/>:selected!==null&&i===selected?<XIcon size={14} stroke={3} aria-hidden="true"/>:["A","B","C","D"][i]}</span>
                 {opt}
               </button>);
             })}
           </div>
 
           {selected!==null&&(
-            <div className="fade" style={{marginTop:24,background:CARD,borderRadius:RADIUS,padding:24,boxShadow:"0 2px 14px rgba(0,0,0,0.05)"}}>
+            <div className="fade" aria-live="polite" style={{marginTop:24,background:CARD,borderRadius:RADIUS,padding:24,boxShadow:"0 2px 14px rgba(0,0,0,0.05)"}}>
               <div style={{fontSize:13,fontWeight:600,color:isWrong?RED:GREEN,marginBottom:10,textTransform:"uppercase",letterSpacing:"0.04em"}}>{isWrong?"À retenir":"Correct"}</div>
               <div style={{fontSize:16,lineHeight:1.6,color:INK,marginBottom:isWrong?16:0,letterSpacing:"-0.01em"}}><strong style={{fontWeight:600}}>« {q.options[q.correct]} »</strong> — {q.rule}</div>
               {isWrong&&q.why&&(<div style={{display:"flex",flexDirection:"column",gap:9,borderTop:"1px solid "+LINE,paddingTop:16}}>{q.options.map((opt,i)=>{ if(i===q.correct||!q.why[i]) return null; return (<div key={i} style={{fontSize:14.5,lineHeight:1.55,color:"#515154"}}><span style={{color:RED,fontWeight:600}}>{opt}</span> — {q.why[i]}</div>); })}</div>)}
@@ -2183,7 +2184,7 @@ function App(){
               {isAI&&<div style={{marginTop:14}}><button className="text-btn" onClick={generateAIQuestion} disabled={aiLoading} style={{background:"none",border:"none",color:BLUE,fontSize:15}}>{aiLoading?<Spinner/>:"Une autre question IA"}</button></div>}
             </div>
           )}
-        </div>
+        </main>
       </div>
     );
   }
@@ -2194,12 +2195,12 @@ function App(){
     const title=pct>=80?"Excellent.":pct>=60?"Bien joué.":"Continue.";
     const sub=pct>=80?"Tu es sur la bonne voie pour le B2.":pct>=60?"Encore un peu d'entraînement.":"La régularité paie. On y retourne ?";
     return (
-      <div style={{minHeight:"100vh",background:BG,display:"flex",alignItems:"center",justifyContent:"center",padding:"max(24px,env(safe-area-inset-top)) 22px"}}>
+      <main style={{minHeight:"100vh",background:BG,display:"flex",alignItems:"center",justifyContent:"center",padding:"max(24px,env(safe-area-inset-top)) 22px"}}>
         <div className="fade" style={{maxWidth:480,width:"100%",textAlign:"center"}}>
           <div style={{fontSize:13,color:BLUE,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.05em",marginBottom:16}}>Résultat</div>
           <div style={{fontSize:80,fontWeight:600,letterSpacing:"-0.04em",lineHeight:1}}>{pct}%</div>
           <div style={{fontSize:17,color:GREY,margin:"8px 0 28px"}}>{score} bonnes réponses sur {total}</div>
-          <h2 style={{fontSize:32,fontWeight:600,letterSpacing:"-0.03em",margin:"0 0 8px"}}>{title}</h2>
+          <h1 style={{fontSize:32,fontWeight:600,letterSpacing:"-0.03em",margin:"0 0 8px"}}>{title}</h1>
           <p style={{fontSize:18,color:GREY,margin:"0 0 32px",letterSpacing:"-0.01em"}}>{sub}</p>
           <div style={{display:"flex",flexDirection:"column",gap:12,alignItems:"center"}}>
             <PillButton onClick={()=>start("all")} style={{minWidth:240}}>Recommencer</PillButton>
@@ -2208,14 +2209,14 @@ function App(){
             <button className="text-btn" onClick={()=>setPhase("home")} style={{background:"none",border:"none",color:GREY,fontSize:15}}>Accueil</button>
           </div>
         </div>
-      </div>
+      </main>
     );
   }
 
   // ===== Review =====
   if(phase==="review"){
     return (
-      <div style={{minHeight:"100vh",background:BG,padding:"max(24px,env(safe-area-inset-top)) 22px 60px"}}>
+      <main style={{minHeight:"100vh",background:BG,padding:"max(24px,env(safe-area-inset-top)) 22px 60px"}}>
         <div style={{maxWidth:600,margin:"0 auto"}}>
           <button className="text-btn" onClick={()=>setPhase("result")} style={{background:"none",border:"none",color:BLUE,fontSize:16,marginBottom:20,padding:0,display:"flex",alignItems:"center",gap:2}}><ChevronLeft size={18}/>Retour</button>
           <h1 style={{fontSize:34,fontWeight:600,letterSpacing:"-0.03em",margin:"0 0 24px"}}>Mes erreurs</h1>
@@ -2229,7 +2230,7 @@ function App(){
           </div>))}
           <div style={{textAlign:"center",marginTop:24}}><PillButton onClick={()=>start("all")} style={{minWidth:220}}>Recommencer</PillButton></div>
         </div>
-      </div>
+      </main>
     );
   }
   return null;
