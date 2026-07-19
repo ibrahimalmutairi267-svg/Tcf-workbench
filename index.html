@@ -15,9 +15,69 @@
 <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
 <style>
+  /* ===== Design tokens ===== */
+  :root {
+    --bg:#fbfbfd; --card:#ffffff; --ink:#1d1d1f;
+    --grey:#6e6e73; --grey-soft:#86868b; --line:#d2d2d7; --track:#e8e8ed;
+    --blue:#0071e3; --blue-dark:#0077ed;
+    --green:#34c759; --green-bg:#eafaef; --green-text:#0a7d33;
+    --red:#ff3b30; --red-bg:#ffeceb; --red-text:#c4271f;
+    --amber-bg:#fff8e6; --amber-text:#9a6b00;
+    --quote-bg:#eaf3fe; --quote-text:#0058b0; --code-bg:#f2f2f7;
+    --overlay:rgba(251,251,253,0.82); --overlay-solid:rgba(255,255,255,0.9);
+    --gradient-brand: linear-gradient(155deg, #0071e3, #0058b0);
+    --shadow-xs:0 1px 4px rgba(0,0,0,0.04);
+    --shadow-card:0 2px 14px rgba(0,0,0,0.05);
+    --shadow-card-lg:0 2px 18px rgba(0,0,0,0.05);
+    --shadow-hover:0 10px 28px rgba(0,0,0,0.09);
+    --shadow-active:0 2px 10px rgba(0,0,0,0.06);
+    --shadow-blue:0 6px 18px rgba(0,113,227,0.28);
+    --shadow-blue-lg:0 8px 24px rgba(0,113,227,.28);
+    --shadow-blue-soft:0 4px 14px rgba(0,113,227,.12);
+    --shadow-bubble-user:0 2px 10px rgba(0,113,227,.22);
+    --shadow-bubble-ai:0 1px 6px rgba(0,0,0,0.06);
+    --ink-soft:#515154;
+    --radius:18px;
+    --level-a1-text:#0a7d33; --level-a1-bg:#eafaef;
+    --level-a2-text:#3d8a2e; --level-a2-bg:#f0f8ea;
+    --level-b1-text:#9a6b00; --level-b1-bg:#fff8e6;
+    --level-b2-text:#b35309; --level-b2-bg:#fff1e6;
+    --level-c1-text:#c4271f; --level-c1-bg:#ffeceb;
+    --level-c2-text:#8b1a8b; --level-c2-bg:#faeafa;
+  }
+  [data-theme="dark"] {
+    --bg:#161618; --card:#242426; --ink:#f2f2f4;
+    --grey:#a8a8ad; --grey-soft:#8e8e93; --line:#3d3d40; --track:#3a3a3c;
+    --blue:#0a84ff; --blue-dark:#409cff;
+    --green:#30d158; --green-bg:rgba(48,209,88,0.16); --green-text:#4ade7a;
+    --red:#ff453a; --red-bg:rgba(255,69,58,0.16); --red-text:#ff7b72;
+    --amber-bg:rgba(255,214,10,0.16); --amber-text:#ffd60a;
+    --quote-bg:rgba(10,132,255,0.18); --quote-text:#6cb6ff; --code-bg:#2f2f32;
+    --overlay:rgba(22,22,24,0.84); --overlay-solid:rgba(30,30,32,0.92);
+    --gradient-brand: linear-gradient(155deg, #0a84ff, #0060c9);
+    --shadow-xs:0 1px 4px rgba(0,0,0,0.28);
+    --shadow-card:0 2px 14px rgba(0,0,0,0.32);
+    --shadow-card-lg:0 2px 18px rgba(0,0,0,0.36);
+    --shadow-hover:0 10px 28px rgba(0,0,0,0.4);
+    --shadow-active:0 2px 10px rgba(0,0,0,0.3);
+    --shadow-blue:0 6px 18px rgba(10,132,255,0.32);
+    --shadow-blue-lg:0 8px 24px rgba(10,132,255,.32);
+    --shadow-blue-soft:0 4px 14px rgba(10,132,255,.18);
+    --shadow-bubble-user:0 2px 10px rgba(10,132,255,.28);
+    --shadow-bubble-ai:0 1px 6px rgba(0,0,0,0.28);
+    --ink-soft:#c7c7cc;
+    --level-a1-text:#4ade7a; --level-a1-bg:rgba(48,209,88,0.14);
+    --level-a2-text:#8ee06a; --level-a2-bg:rgba(142,224,106,0.14);
+    --level-b1-text:#ffd60a; --level-b1-bg:rgba(255,214,10,0.14);
+    --level-b2-text:#ff9f0a; --level-b2-bg:rgba(255,159,10,0.14);
+    --level-c1-text:#ff7b72; --level-c1-bg:rgba(255,69,58,0.14);
+    --level-c2-text:#df6fff; --level-c2-bg:rgba(223,111,255,0.14);
+  }
+
   * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; -webkit-font-smoothing: antialiased; }
-  html, body { margin:0; padding:0; background:#fff; overscroll-behavior:none; }
-  body { font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','SF Pro Display',system-ui,sans-serif; color:#1d1d1f; }
+  html, body { margin:0; padding:0; background:var(--bg); overscroll-behavior:none; }
+  html { color-scheme: light dark; }
+  body { font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','SF Pro Display',system-ui,sans-serif; color:var(--ink); transition:background-color .25s ease, color .25s ease; }
   #root { min-height:100vh; min-height:-webkit-fill-available; }
   button { font-family:inherit; cursor:pointer; -webkit-user-select:none; user-select:none; }
   textarea, input { font-family:inherit; }
@@ -26,21 +86,23 @@
   .spin { animation:spin 0.8s linear infinite; display:inline-block; }
   @keyframes fadeUp { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
   .fade { animation:fadeUp 0.5s cubic-bezier(0.16,1,0.3,1); }
+  @keyframes modalIn { from { opacity:0; transform:translateY(16px) scale(.98); } to { opacity:1; transform:none; } }
+  .modal-in { animation:modalIn .32s cubic-bezier(0.16,1,0.3,1) both; }
   ::-webkit-scrollbar { width:0; height:0; }
 
   /* Interactive elevation for card-style buttons */
   .hcard { transition:transform .18s cubic-bezier(0.16,1,0.3,1), box-shadow .18s ease, border-color .18s ease; will-change:transform; }
-  .hcard:hover { transform:translateY(-2px); box-shadow:0 10px 28px rgba(0,0,0,0.09); }
-  .hcard:active { transform:translateY(0) scale(0.99); box-shadow:0 2px 10px rgba(0,0,0,0.06); }
+  .hcard:hover { transform:translateY(-2px); box-shadow:var(--shadow-hover); }
+  .hcard:active { transform:translateY(0) scale(0.99); box-shadow:var(--shadow-active); }
 
   /* Answer-option rows */
   .opt-row { transition:transform .15s ease, box-shadow .15s ease, border-color .15s ease, background-color .15s ease, opacity .15s ease; }
-  .opt-row:not(:disabled):hover { border-color:#0071e3; }
+  .opt-row:not(:disabled):hover { border-color:var(--blue); }
   .opt-row:not(:disabled):active { transform:scale(0.99); }
 
   /* Pill buttons */
   .pill-btn { transition:transform .15s ease, background-color .15s ease, opacity .15s ease, box-shadow .15s ease; }
-  .pill-btn:hover:not(:disabled) { box-shadow:0 6px 18px rgba(0,113,227,0.28); }
+  .pill-btn:hover:not(:disabled) { box-shadow:var(--shadow-blue); }
   .pill-btn:active:not(:disabled) { transform:scale(0.97); }
 
   /* Plain text/icon buttons */
@@ -48,18 +110,26 @@
   .text-btn:hover { opacity:0.65; }
 
   /* Keyboard accessibility */
-  button:focus-visible, a:focus-visible, input:focus-visible {
-    outline:2px solid #0071e3; outline-offset:2px; border-radius:8px;
+  button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
+    outline:2px solid var(--blue); outline-offset:2px; border-radius:8px;
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .fade { animation:none; }
+    .fade, .modal-in { animation:none; }
     .hcard, .opt-row, .pill-btn, .text-btn { transition:none; }
     .hcard:hover, .pill-btn:active, .opt-row:active { transform:none; }
     .spin { animation-duration:1.4s; }
     .typing i { animation:none !important; opacity:.6 !important; }
     .msg-in { animation:none; }
   }
+  /* Same reductions, opted into from Settings regardless of the OS setting */
+  [data-reduce-motion="true"] .fade, [data-reduce-motion="true"] .modal-in { animation:none; }
+  [data-reduce-motion="true"] .hcard, [data-reduce-motion="true"] .opt-row, [data-reduce-motion="true"] .pill-btn, [data-reduce-motion="true"] .text-btn { transition:none; }
+  [data-reduce-motion="true"] .hcard:hover, [data-reduce-motion="true"] .pill-btn:active, [data-reduce-motion="true"] .opt-row:active { transform:none; }
+  [data-reduce-motion="true"] .spin { animation-duration:1.4s; }
+  [data-reduce-motion="true"] .typing i { animation:none !important; opacity:.6 !important; }
+  [data-reduce-motion="true"] .msg-in { animation:none; }
+  [data-reduce-motion="true"] .tutor-scroll { scroll-behavior:auto; }
 
   /* ===== Tutor chat ===== */
   @keyframes msgIn { from { opacity:0; transform:translateY(8px) scale(.98); } to { opacity:1; transform:none; } }
@@ -67,24 +137,53 @@
 
   @keyframes blink { 0%,60%,100% { transform:translateY(0); opacity:.35; } 30% { transform:translateY(-4px); opacity:1; } }
   .typing { display:flex; gap:4px; align-items:center; }
-  .typing i { width:6px; height:6px; border-radius:50%; background:#8e8e93; display:block; animation:blink 1.2s infinite; }
+  .typing i { width:6px; height:6px; border-radius:50%; background:var(--grey-soft); display:block; animation:blink 1.2s infinite; }
   .typing i:nth-child(2){ animation-delay:.15s; }
   .typing i:nth-child(3){ animation-delay:.3s; }
 
   .chip {
-    border:1px solid #d2d2d7; background:#fff; border-radius:14px;
-    padding:11px 14px; font-size:14px; line-height:1.35; color:#1d1d1f;
+    border:1px solid var(--line); background:var(--card); border-radius:14px;
+    padding:12px 15px; font-size:14px; line-height:1.4; color:var(--ink);
     text-align:left; width:100%; cursor:pointer;
     transition:transform .15s ease, border-color .15s ease, box-shadow .15s ease, background-color .15s ease;
   }
-  .chip:hover { border-color:#0071e3; box-shadow:0 4px 14px rgba(0,113,227,.12); transform:translateY(-1px); }
+  .chip:hover { border-color:var(--blue); box-shadow:var(--shadow-blue-soft); transform:translateY(-1px); }
   .chip:active { transform:translateY(0) scale(.99); }
 
   .tutor-scroll { scroll-behavior:smooth; }
   @media (prefers-reduced-motion: reduce) { .tutor-scroll { scroll-behavior:auto; } }
+
+  /* ===== Responsive ===== */
+  @media (min-width: 720px) {
+    .app-shell { padding-left:32px; padding-right:32px; }
+  }
+  @media (min-width: 960px) {
+    .home-grid { display:grid; grid-template-columns:1.3fr 1fr; align-items:start; gap:18px; }
+    .home-grid > .fade { margin-bottom:0 !important; }
+  }
+  @media (max-height: 480px) and (orientation: landscape) {
+    .hero-pad { padding-top:20px !important; padding-bottom:20px !important; }
+    .hero-title { font-size:34px !important; }
+  }
+
+  /* Skip link */
+  .skip-link { position:absolute; left:12px; top:-48px; background:var(--blue); color:#fff; padding:10px 16px; borderRadius:10px; border-radius:10px; z-index:200; transition:top .15s ease; font-size:14px; font-weight:600; }
+  .skip-link:focus { top:12px; }
 </style>
 </head>
 <body>
+<script>
+(function(){
+  try{
+    var KEY="tcf_theme_v1";
+    var stored=localStorage.getItem(KEY);
+    var mode=stored||"system";
+    var dark=mode==="dark"||(mode==="system"&&window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches);
+    document.documentElement.setAttribute("data-theme", dark?"dark":"light");
+  }catch(e){}
+})();
+</script>
+<a href="#main" class="skip-link">Aller au contenu</a>
 <div id="root"></div>
 <script type="text/babel" data-presets="react">
 const { useState, useEffect, useCallback, useRef, useMemo } = React;
@@ -1425,22 +1524,50 @@ const READING = [
   { level:"B2", passage:"Le nombre de travailleurs indépendants progresse. Il devient simple d'être à son compte, avec pour unique outil un ordinateur. Mais le risque est de se retrouver coupé des autres. Or, notre créativité et notre productivité sont dépendantes des rencontres que nous faisons. Conserver un lien social est indispensable à notre bien-être, donc à notre travail. L'espace partagé de travail se présente comme une solution : il favorise les moments de détente et les contacts professionnels. D'ailleurs, les travailleurs utilisant ces espaces s'associent souvent temporairement pour répondre à une mission. Ces aménagements pourraient donc devenir essentiels à de nombreux jeunes diplômés.", question:"Sur quoi cet article insiste-t-il ?", options:["L'importance de la gestion des ressources humaines.","L'intérêt d'éviter les inconvénients liés à l'isolement.","La facilité de réaliser des projets communs à distance.","La nécessité de souder les équipes dans une entreprise."], correct:1, rule:"Les espaces partagés préservent le lien social et évitent l'isolement des indépendants : c'est l'intérêt d'éviter l'isolement.", why:["Les ressources humaines ne sont pas le sujet.",null,"Au contraire, il s'agit de rencontres en présentiel.","Le texte parle des indépendants, pas des équipes d'entreprise."] },
 ];
 
-// ===== Apple-style design tokens =====
-const BLUE = "#0071e3";          // Apple accent blue
-const BLUE_DARK = "#0077ed";
-const INK = "#1d1d1f";           // near-black text
-const GREY = "#86868b";          // Apple secondary grey
-const LINE = "#d2d2d7";          // hairline border
-const BG = "#fbfbfd";            // Apple off-white page
-const CARD = "#ffffff";
-const GREEN = "#34c759";         // iOS green (correct)
-const RED = "#ff3b30";           // iOS red (wrong)
+// ===== Design tokens =====
+// All values are CSS custom properties (see <style> :root / [data-theme=dark]),
+// so every screen re-themes automatically when the theme attribute flips.
+const BLUE = "var(--blue)";
+const BLUE_DARK = "var(--blue-dark)";
+const INK = "var(--ink)";
+const GREY = "var(--grey)";        // AA-safe secondary text
+const GREY_SOFT = "var(--grey-soft)"; // decorative-only (icons, dots), not small text
+const LINE = "var(--line)";
+const BG = "var(--bg)";
+const CARD = "var(--card)";
+const GREEN = "var(--green)";
+const RED = "var(--red)";
+const GREEN_BG = "var(--green-bg)", GREEN_TEXT = "var(--green-text)";
+const RED_BG = "var(--red-bg)", RED_TEXT = "var(--red-text)";
+const AMBER_BG = "var(--amber-bg)", AMBER_TEXT = "var(--amber-text)";
+const QUOTE_BG = "var(--quote-bg)", QUOTE_TEXT = "var(--quote-text)";
+const CODE_BG = "var(--code-bg)";
+const TRACK_BG = "var(--track)";
+const GRADIENT_BRAND = "var(--gradient-brand)";
+const OVERLAY = "var(--overlay)", OVERLAY_SOLID = "var(--overlay-solid)";
+const SHADOW_XS = "var(--shadow-xs)";
+const SHADOW_CARD = "var(--shadow-card)";
+const SHADOW_CARD_LG = "var(--shadow-card-lg)";
+const SHADOW_BUBBLE_USER = "var(--shadow-bubble-user)";
+const SHADOW_BUBBLE_AI = "var(--shadow-bubble-ai)";
+const SHADOW_BLUE_LG = "var(--shadow-blue-lg)";
+const INK_SOFT = "var(--ink-soft)"; // secondary body text, darker/denser than GREY
 
 // CEFR level palette — cool/easy through warm/hard
 const LEVELS = ["A1","A2","B1","B2","C1","C2"];
-const LEVEL_COLORS = { A1:"#0a7d33", A2:"#3d8a2e", B1:"#9a6b00", B2:"#b35309", C1:"#c4271f", C2:"#8b1a8b" };
-const LEVEL_BG     = { A1:"#eafaef", A2:"#f0f8ea", B1:"#fff8e6", B2:"#fff1e6", C1:"#ffeceb", C2:"#faeafa" };
-const RADIUS = 18;
+const LEVEL_COLORS = { A1:"var(--level-a1-text)", A2:"var(--level-a2-text)", B1:"var(--level-b1-text)", B2:"var(--level-b2-text)", C1:"var(--level-c1-text)", C2:"var(--level-c2-text)" };
+const LEVEL_BG     = { A1:"var(--level-a1-bg)", A2:"var(--level-a2-bg)", B1:"var(--level-b1-bg)", B2:"var(--level-b2-bg)", C1:"var(--level-c1-bg)", C2:"var(--level-c2-bg)" };
+const RADIUS = "var(--radius)";
+
+const THEME_KEY = "tcf_theme_v1";
+function loadThemePref(){ try{ return localStorage.getItem(THEME_KEY)||"system"; }catch(e){ return "system"; } }
+function applyTheme(mode){
+  try{ localStorage.setItem(THEME_KEY, mode); }catch(e){}
+  const dark = mode==="dark" || (mode==="system" && window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
+  document.documentElement.setAttribute("data-theme", dark?"dark":"light");
+  const meta=document.querySelector('meta[name="theme-color"]');
+  if(meta) meta.setAttribute("content", dark?"#161618":"#ffffff");
+}
 
 const STORE_KEY = "tcf_progress_v1";
 const WORKER_KEY = "tcf_worker_url";
@@ -1461,6 +1588,15 @@ function loadAiBank(){ try{ const r=localStorage.getItem(AI_BANK_KEY); return r?
 function saveAiBank(arr){ try{ localStorage.setItem(AI_BANK_KEY,JSON.stringify(arr)); }catch(e){} }
 function loadPlan(){ try{ const r=localStorage.getItem(PLAN_KEY); return r?JSON.parse(r):null; }catch(e){ return null; } }
 function savePlan(p){ try{ p?localStorage.setItem(PLAN_KEY,JSON.stringify(p)):localStorage.removeItem(PLAN_KEY); }catch(e){} }
+
+// In-app "reduce motion" override — lets someone turn animations off from
+// inside the app even when they can't (or haven't) changed the OS setting.
+const REDUCE_MOTION_KEY = "tcf_reduce_motion_v1";
+function loadReduceMotion(){ try{ return localStorage.getItem(REDUCE_MOTION_KEY)==="1"; }catch(e){ return false; } }
+function saveReduceMotion(on){ try{ on?localStorage.setItem(REDUCE_MOTION_KEY,"1"):localStorage.removeItem(REDUCE_MOTION_KEY); }catch(e){} }
+function prefersReducedMotion(){
+  return loadReduceMotion() || (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+}
 
 // Date helpers — normalised to local midnight so "day 3" never depends on
 // what time of day the plan happened to be started.
@@ -1533,6 +1669,10 @@ function RefreshIcon(props){ return <Icon {...props}><path d="M21 12a9 9 0 1 1-3
 function CheckIcon(props){ return <Icon {...props}><polyline points="20 6 9 17 4 12"/></Icon>; }
 function XIcon(props){ return <Icon {...props}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></Icon>; }
 function MessageIcon(props){ return <Icon {...props}><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></Icon>; }
+function ZapIcon(props){ return <Icon {...props}><polygon points="13 2 3 14 11 14 10 22 21 10 13 10 13 2"/></Icon>; }
+function SunIcon(props){ return <Icon {...props}><circle cx="12" cy="12" r="4.5"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></Icon>; }
+function MoonIcon(props){ return <Icon {...props}><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></Icon>; }
+function InfoIcon(props){ return <Icon {...props}><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16.5"/><circle cx="12" cy="7.8" r="1.1" fill="currentColor" stroke="none"/></Icon>; }
 
 // Wordmark used in nav bars: a small rounded badge + label
 // Lightweight formatter for tutor replies: **bold**, bullet/numbered lists, and
@@ -1545,8 +1685,8 @@ function inline(text, keyBase){
     if(m.index>last) out.push(text.slice(last,m.index));
     const tok=m[0];
     if(tok.startsWith("**")) out.push(<strong key={keyBase+"-b"+(k++)} style={{fontWeight:650,color:INK}}>{tok.slice(2,-2)}</strong>);
-    else if(tok.startsWith("«")) out.push(<span key={keyBase+"-q"+(k++)} style={{background:"#eaf3fe",color:"#0058b0",borderRadius:5,padding:"1px 5px",fontWeight:500}}>{tok}</span>);
-    else out.push(<code key={keyBase+"-c"+(k++)} style={{background:"#f2f2f7",borderRadius:5,padding:"1px 5px",fontSize:"0.92em"}}>{tok.slice(1,-1)}</code>);
+    else if(tok.startsWith("«")) out.push(<span key={keyBase+"-q"+(k++)} style={{background:QUOTE_BG,color:QUOTE_TEXT,borderRadius:5,padding:"1px 5px",fontWeight:500}}>{tok}</span>);
+    else out.push(<code key={keyBase+"-c"+(k++)} style={{background:CODE_BG,borderRadius:5,padding:"1px 5px",fontSize:"0.92em"}}>{tok.slice(1,-1)}</code>);
     last=m.index+tok.length;
   }
   if(last<text.length) out.push(text.slice(last));
@@ -1580,8 +1720,8 @@ function RichText({ text }){
 function Wordmark({ size=30 }){
   return (
     <div style={{display:"flex",alignItems:"center",gap:9}}>
-      <div style={{width:size,height:size,borderRadius:size*0.32,background:"linear-gradient(155deg, #0071e3, #0058b0)",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:size*0.42,fontWeight:700,letterSpacing:"-0.03em",flexShrink:0}}>B2</div>
-      <span style={{fontSize:18,fontWeight:600,letterSpacing:"-0.02em",color:"#1d1d1f"}}>TCF</span>
+      <div style={{width:size,height:size,borderRadius:size*0.32,background:GRADIENT_BRAND,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:size*0.42,fontWeight:700,letterSpacing:"-0.03em",flexShrink:0}}>B2</div>
+      <span style={{fontSize:18,fontWeight:600,letterSpacing:"-0.02em",color:INK}}>TCF</span>
     </div>
   );
 }
@@ -1590,12 +1730,51 @@ function Wordmark({ size=30 }){
 function PillButton({ onClick, children, kind="primary", disabled, style }){
   const base={ border:"none", borderRadius:980, padding:"12px 22px", fontSize:16, fontWeight:500, letterSpacing:"-0.01em", ...style };
   const kinds={
-    primary:{ background:disabled?"#a3a3a8":BLUE, color:"#fff" },
+    primary:{ background:disabled?GREY_SOFT:BLUE, color:"#fff" },
     secondary:{ background:"transparent", color:BLUE, border:"1px solid "+BLUE },
-    grey:{ background:"#e8e8ed", color:INK },
+    grey:{ background:TRACK_BG, color:INK },
     ghost:{ background:"transparent", color:BLUE, padding:"8px 4px" },
   };
   return <button className="pill-btn" onClick={onClick} disabled={disabled} style={{...base,...kinds[kind]}}>{children}</button>;
+}
+
+// Small uppercase eyebrow used to label dashboard/settings sections —
+// gives scannable structure without another bordered box.
+function SectionLabel({ children, icon:Icon }){
+  return (
+    <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:12,paddingLeft:2}}>
+      {Icon&&<Icon size={13} style={{color:GREY}}/>}
+      <span style={{fontSize:12,fontWeight:700,color:GREY,textTransform:"uppercase",letterSpacing:"0.06em"}}>{children}</span>
+    </div>
+  );
+}
+
+// Circular score visualization for the Result screen. Animates its sweep
+// on mount unless the user has asked for reduced motion.
+function ScoreRing({ pct, size=172, strokeWidth=13 }){
+  const [drawn,setDrawn]=useState(0);
+  useEffect(()=>{
+    if(prefersReducedMotion()){ setDrawn(pct); return; }
+    const t=setTimeout(()=>setDrawn(pct),60);
+    return ()=>clearTimeout(t);
+  },[pct]);
+  const r=(size-strokeWidth)/2;
+  const c=2*Math.PI*r;
+  const offset=c-(Math.max(0,Math.min(100,drawn))/100)*c;
+  const color = pct>=80?GREEN:pct>=60?BLUE:AMBER_TEXT;
+  return (
+    <div style={{position:"relative",width:size,height:size,margin:"0 auto"}}>
+      <svg width={size} height={size} style={{transform:"rotate(-90deg)"}}>
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={TRACK_BG} strokeWidth={strokeWidth}/>
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={color} strokeWidth={strokeWidth}
+          strokeLinecap="round" strokeDasharray={c} strokeDashoffset={offset}
+          style={{transition:"stroke-dashoffset 1s cubic-bezier(0.16,1,0.3,1)"}}/>
+      </svg>
+      <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column"}}>
+        <div style={{fontSize:size*0.26,fontWeight:700,letterSpacing:"-0.03em",color:INK,lineHeight:1}}>{pct}%</div>
+      </div>
+    </div>
+  );
 }
 
 function App(){
@@ -1622,9 +1801,47 @@ function App(){
   const [showSettings,setShowSettings]=useState(false);
   const [aiBank,setAiBank]=useState([]);
   const [plan,setPlan]=useState(null);
+  const [themeMode,setThemeMode]=useState(loadThemePref);
+  const [reduceMotion,setReduceMotion]=useState(loadReduceMotion);
   const hasWorker=true; // built-in worker ships with the app
+  const mainRef=useRef(null);
+  const screenKey=showSettings?"settings":showTutor?"tutor":phase;
 
   useEffect(()=>{ const s=loadProgress(); if(s){ setStats(s.stats||emptyStats); if(s.session&&s.session.order&&s.session.current<s.session.order.length) setHasSession(true); } setAiBank(loadAiBank()); setPlan(loadPlan()); },[]);
+
+  useEffect(()=>{
+    saveReduceMotion(reduceMotion);
+    document.documentElement.setAttribute("data-reduce-motion", reduceMotion?"true":"false");
+  },[reduceMotion]);
+
+  // Move focus to the new screen's heading on every navigation so keyboard
+  // and screen-reader users land somewhere meaningful instead of on <body>.
+  useEffect(()=>{ mainRef.current?.focus({preventScroll:true}); },[screenKey]);
+
+  // Global keyboard shortcuts: Escape backs out of overlays/screens.
+  useEffect(()=>{
+    function onKeyDown(e){
+      if(e.key!=="Escape") return;
+      if(showTutor){ setShowTutor(false); return; }
+      if(showSettings){ setShowSettings(false); return; }
+      if(phase==="review"){ setPhase("result"); return; }
+      if(phase==="quiz"&&selected===null){ setAiQuestion(null); setPhase("home"); }
+    }
+    window.addEventListener("keydown",onKeyDown);
+    return ()=>window.removeEventListener("keydown",onKeyDown);
+  },[showTutor,showSettings,phase,selected]);
+
+  // Keep the <html data-theme> attribute (set synchronously pre-paint by the
+  // inline head script) in sync with in-app changes, and follow the OS if
+  // the user hasn't overridden it.
+  useEffect(()=>{
+    applyTheme(themeMode);
+    if(themeMode!=="system"||!window.matchMedia) return;
+    const mq=window.matchMedia("(prefers-color-scheme: dark)");
+    const onChange=()=>applyTheme("system");
+    mq.addEventListener?mq.addEventListener("change",onChange):mq.addListener(onChange);
+    return ()=>{ mq.removeEventListener?mq.removeEventListener("change",onChange):mq.removeListener(onChange); };
+  },[themeMode]);
 
   // ===== 14-day plan =====
   // The plan fixes a question order up front, then each day unlocks another
@@ -1731,6 +1948,25 @@ function App(){
     return (<span>{p[0]}<span style={{display:"inline-block",borderBottom:"2px solid "+BLUE,minWidth:54,margin:"0 5px",color:selected!==null?BLUE:"transparent",fontWeight:600}}>{selected!==null?q.options[q.correct]:"\u00A0\u00A0\u00A0\u00A0\u00A0"}</span>{p[1]}</span>);
   }
 
+  // Keyboard play: 1-4/A-D pick an option before it's answered, Enter/Space
+  // advances once it is \u2014 lets the whole quiz be driven without a mouse.
+  useEffect(()=>{
+    if(phase!=="quiz"||!q||showTutor||showSettings) return;
+    function onKeyDown(e){
+      if(e.target&&["INPUT","TEXTAREA"].includes(e.target.tagName)) return;
+      if(selected===null){
+        const idx="1234ABCDabcd".indexOf(e.key)%4;
+        if(idx>=0&&idx<q.options.length&&"1234ABCDabcd".includes(e.key)) handleSelect(idx);
+      } else if(e.key==="Enter"||e.key===" "){
+        e.preventDefault();
+        if(aiQuestion) { setAiQuestion(null); setSelected(null); setPhase("home"); }
+        else next();
+      }
+    }
+    window.addEventListener("keydown",onKeyDown);
+    return ()=>window.removeEventListener("keydown",onKeyDown);
+  },[phase,q,selected,showTutor,showSettings,aiQuestion]);
+
   // ===== Tutor Chat =====
   // Starter prompts, grouped — shown on the empty state so the tutor's
   // capabilities are discoverable instead of facing a blank box.
@@ -1804,11 +2040,10 @@ function App(){
 
     const empty=msgs.length===0;
     return (
-      <div style={{position:"fixed",inset:0,background:BG,zIndex:50,display:"flex",flexDirection:"column",paddingTop:"env(safe-area-inset-top)"}}>
-        {/* Header */}
-        <div style={{padding:"14px 18px",display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:"1px solid "+LINE,background:"rgba(255,255,255,0.82)",backdropFilter:"blur(20px)",flexShrink:0}}>
+      <div role="dialog" aria-modal="true" aria-label="Tuteur IA" className="modal-in" style={{position:"fixed",inset:0,background:BG,zIndex:50,display:"flex",flexDirection:"column",paddingTop:"env(safe-area-inset-top)"}}>
+        <header style={{padding:"15px 18px",display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:"1px solid "+LINE,background:OVERLAY,backdropFilter:"blur(20px)",flexShrink:0}}>
           <div style={{display:"flex",alignItems:"center",gap:11}}>
-            <div style={{width:34,height:34,borderRadius:11,background:"linear-gradient(155deg,#0071e3,#0058b0)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+            <div style={{width:34,height:34,borderRadius:11,background:GRADIENT_BRAND,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
               <SparkleIcon size={17} style={{color:"#fff"}}/>
             </div>
             <div style={{lineHeight:1.25}}>
@@ -1816,31 +2051,30 @@ function App(){
               <div style={{fontSize:12,color:busy?BLUE:GREY}}>{busy?"écrit…":"Spécialiste TCF B2"}</div>
             </div>
           </div>
-          <div style={{display:"flex",alignItems:"center",gap:14}}>
+          <div style={{display:"flex",alignItems:"center",gap:16}}>
             {!empty&&<button className="text-btn" onClick={()=>setMsgs([])} aria-label="Nouvelle conversation" style={{background:"none",border:"none",color:GREY,padding:0,display:"flex"}}><RefreshIcon size={18}/></button>}
             <button className="text-btn" onClick={onClose} style={{background:"none",border:"none",color:BLUE,fontSize:16}}>Fermer</button>
           </div>
-        </div>
+        </header>
 
-        {/* Messages / welcome */}
-        <div ref={sc} className="tutor-scroll" style={{flex:1,overflowY:"auto",padding:"20px 18px",display:"flex",flexDirection:"column",gap:14}}>
+        <main ref={el=>{sc.current=el; mainRef.current=el;}} tabIndex={-1} className="tutor-scroll" style={{outline:"none",flex:1,overflowY:"auto",padding:"22px 18px",display:"flex",flexDirection:"column",gap:16}}>
           {empty ? (
             <div className="fade" style={{paddingTop:8}}>
-              <div style={{textAlign:"center",marginBottom:26}}>
-                <div style={{width:56,height:56,borderRadius:18,background:"linear-gradient(155deg,#0071e3,#0058b0)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 14px",boxShadow:"0 8px 24px rgba(0,113,227,.28)"}}>
+              <div style={{textAlign:"center",marginBottom:28}}>
+                <div style={{width:56,height:56,borderRadius:18,background:GRADIENT_BRAND,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px",boxShadow:SHADOW_BLUE_LG}}>
                   <SparkleIcon size={26} style={{color:"#fff"}}/>
                 </div>
-                <h2 style={{fontSize:25,fontWeight:600,letterSpacing:"-0.03em",margin:"0 0 6px"}}>Comment puis-je t'aider ?</h2>
-                <p style={{fontSize:15,color:GREY,margin:0,lineHeight:1.45,maxWidth:330,marginLeft:"auto",marginRight:"auto"}}>Pose une question, demande une règle, ou fais-toi interroger. Voici quelques idées :</p>
+                <h2 style={{fontSize:25,fontWeight:600,letterSpacing:"-0.03em",margin:"0 0 8px"}}>Comment puis-je t'aider ?</h2>
+                <p style={{fontSize:15,color:GREY,margin:0,lineHeight:1.5,maxWidth:330,marginLeft:"auto",marginRight:"auto"}}>Pose une question, demande une règle, ou fais-toi interroger. Voici quelques idées :</p>
               </div>
-              <div style={{display:"flex",flexDirection:"column",gap:20,maxWidth:520,margin:"0 auto",width:"100%"}}>
+              <div style={{display:"flex",flexDirection:"column",gap:22,maxWidth:520,margin:"0 auto",width:"100%"}}>
                 {TUTOR_STARTERS.map(g=>(
                   <div key={g.cat}>
-                    <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:9}}>
+                    <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:10}}>
                       <g.icon size={14} style={{color:BLUE}}/>
                       <span style={{fontSize:12,fontWeight:600,color:GREY,textTransform:"uppercase",letterSpacing:"0.05em"}}>{g.cat}</span>
                     </div>
-                    <div style={{display:"flex",flexDirection:"column",gap:7}}>
+                    <div style={{display:"flex",flexDirection:"column",gap:8}}>
                       {g.items.map(s=>(
                         <button key={s} className="chip" onClick={()=>send(s)}>{s}</button>
                       ))}
@@ -1850,97 +2084,144 @@ function App(){
               </div>
             </div>
           ) : msgs.map((m,i)=>(
-            <div key={i} className="msg-in" style={{display:"flex",gap:9,alignItems:"flex-end",flexDirection:m.role==="user"?"row-reverse":"row"}}>
+            <div key={i} className="msg-in" style={{display:"flex",gap:10,alignItems:"flex-end",flexDirection:m.role==="user"?"row-reverse":"row"}}>
               {m.role==="assistant"&&(
-                <div style={{width:26,height:26,borderRadius:9,background:"linear-gradient(155deg,#0071e3,#0058b0)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginBottom:2}}>
+                <div style={{width:26,height:26,borderRadius:9,background:GRADIENT_BRAND,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginBottom:2}}>
                   <SparkleIcon size={13} style={{color:"#fff"}}/>
                 </div>
               )}
-              <div style={{maxWidth:"84%",background:m.role==="user"?BLUE:CARD,color:m.role==="user"?"#fff":INK,borderRadius:20,borderBottomRightRadius:m.role==="user"?6:20,borderBottomLeftRadius:m.role==="user"?20:6,padding:"12px 16px",fontSize:15,lineHeight:1.55,boxShadow:m.role==="user"?"0 2px 10px rgba(0,113,227,.22)":"0 1px 6px rgba(0,0,0,0.06)"}}>
+              <div style={{maxWidth:"84%",background:m.role==="user"?BLUE:CARD,color:m.role==="user"?"#fff":INK,borderRadius:20,borderBottomRightRadius:m.role==="user"?6:20,borderBottomLeftRadius:m.role==="user"?20:6,padding:"13px 17px",fontSize:15.5,lineHeight:1.58,boxShadow:m.role==="user"?SHADOW_BUBBLE_USER:SHADOW_BUBBLE_AI}}>
                 {m.role==="user"?<span style={{whiteSpace:"pre-wrap"}}>{m.content}</span>:<RichText text={m.content}/>}
               </div>
             </div>
           ))}
           {busy&&(
-            <div className="msg-in" style={{display:"flex",gap:9,alignItems:"flex-end"}}>
-              <div style={{width:26,height:26,borderRadius:9,background:"linear-gradient(155deg,#0071e3,#0058b0)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginBottom:2}}>
+            <div className="msg-in" role="status" aria-label="Le tuteur écrit une réponse" style={{display:"flex",gap:10,alignItems:"flex-end"}}>
+              <div style={{width:26,height:26,borderRadius:9,background:GRADIENT_BRAND,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginBottom:2}}>
                 <SparkleIcon size={13} style={{color:"#fff"}}/>
               </div>
-              <div style={{background:CARD,borderRadius:20,borderBottomLeftRadius:6,padding:"14px 16px",boxShadow:"0 1px 6px rgba(0,0,0,0.06)"}}>
+              <div style={{background:CARD,borderRadius:20,borderBottomLeftRadius:6,padding:"14px 17px",boxShadow:SHADOW_BUBBLE_AI}}>
                 <div className="typing"><i/><i/><i/></div>
               </div>
             </div>
           )}
-        </div>
+        </main>
 
-        {/* Composer */}
-        <div style={{padding:"12px 14px",paddingBottom:"max(12px,env(safe-area-inset-bottom))",background:"rgba(255,255,255,0.9)",backdropFilter:"blur(20px)",borderTop:"1px solid "+LINE,flexShrink:0}}>
-          <div style={{display:"flex",gap:9,alignItems:"flex-end",maxWidth:640,margin:"0 auto"}}>
+        <footer style={{padding:"12px 14px",paddingBottom:"max(12px,env(safe-area-inset-bottom))",background:OVERLAY_SOLID,backdropFilter:"blur(20px)",borderTop:"1px solid "+LINE,flexShrink:0}}>
+          <div style={{display:"flex",gap:10,alignItems:"flex-end",maxWidth:640,margin:"0 auto"}}>
             <textarea ref={ta} value={input} onChange={e=>setInput(e.target.value)}
               onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send();}}}
-              placeholder="Pose ta question…" rows={1}
-              style={{flex:1,borderRadius:20,border:"1px solid "+LINE,padding:"11px 16px",fontSize:16,resize:"none",outline:"none",maxHeight:120,background:BG,lineHeight:1.4}}/>
+              placeholder="Pose ta question…" rows={1} aria-label="Ton message au tuteur"
+              style={{flex:1,borderRadius:20,border:"1px solid "+LINE,padding:"12px 17px",fontSize:16,resize:"none",outline:"none",maxHeight:120,background:BG,color:INK,lineHeight:1.4}}/>
             <button className="pill-btn" onClick={()=>send()} disabled={busy||!input.trim()} aria-label="Envoyer"
-              style={{borderRadius:"50%",width:40,height:40,border:"none",background:busy||!input.trim()?"#c7c7cc":BLUE,color:"#fff",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",marginBottom:1}}>
+              style={{borderRadius:"50%",width:42,height:42,border:"none",background:busy||!input.trim()?GREY_SOFT:BLUE,color:"#fff",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",marginBottom:1}}>
               <ChevronRight size={18} stroke={2.5} style={{transform:"rotate(-90deg)"}}/>
             </button>
           </div>
-        </div>
+        </footer>
       </div>
     );
   }
 
   // ===== Settings =====
   if(showSettings){
+    const themeOptions=[
+      { id:"system", label:"Système", Icon:GearIcon },
+      { id:"light", label:"Clair", Icon:SunIcon },
+      { id:"dark", label:"Sombre", Icon:MoonIcon },
+    ];
     return (
       <div style={{minHeight:"100vh",background:BG,padding:"max(24px,env(safe-area-inset-top)) 22px 40px"}}>
-        <div style={{maxWidth:600,margin:"0 auto"}} className="fade">
+        <main ref={mainRef} tabIndex={-1} style={{outline:"none",maxWidth:600,margin:"0 auto"}} className="fade">
           <button className="text-btn" onClick={()=>setShowSettings(false)} style={{background:"none",border:"none",color:BLUE,fontSize:16,marginBottom:24,padding:0,display:"flex",alignItems:"center",gap:2}}><ChevronLeft size={18}/>Retour</button>
-          <h1 style={{fontSize:34,fontWeight:600,letterSpacing:"-0.03em",margin:"0 0 6px"}}>Réglages</h1>
-          <p style={{color:GREY,fontSize:17,margin:"0 0 30px",letterSpacing:"-0.01em"}}>Tuteur IA, questions générées et explications sur mesure — déjà actifs, aucune configuration requise.</p>
+          <h1 style={{fontSize:32,fontWeight:600,letterSpacing:"-0.03em",margin:"0 0 30px"}}>Réglages</h1>
 
-          <div style={{background:CARD,borderRadius:RADIUS,padding:24,boxShadow:"0 2px 14px rgba(0,0,0,0.05)",display:"flex",alignItems:"center",gap:14}}>
-            <div style={{width:40,height:40,borderRadius:12,background:"linear-gradient(155deg,#0071e3,#0058b0)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+          <SectionLabel icon={SunIcon}>Apparence</SectionLabel>
+          <div style={{background:CARD,border:"1px solid "+LINE,borderRadius:RADIUS,padding:8,display:"flex",gap:6,marginBottom:28}}>
+            {themeOptions.map(o=>{
+              const active=themeMode===o.id;
+              return (
+                <button key={o.id} onClick={()=>setThemeMode(o.id)} aria-pressed={active}
+                  style={{flex:1,border:"none",borderRadius:12,padding:"12px 8px",background:active?BLUE:"transparent",color:active?"#fff":INK,display:"flex",flexDirection:"column",alignItems:"center",gap:6,fontSize:13,fontWeight:500,transition:"background-color .15s ease"}}>
+                  <o.Icon size={18}/>{o.label}
+                </button>
+              );
+            })}
+          </div>
+
+          <SectionLabel icon={TargetIcon}>Apprentissage</SectionLabel>
+          <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:28}}>
+            {plan&&<div style={{background:CARD,border:"1px solid "+LINE,borderRadius:RADIUS,padding:20,display:"flex",justifyContent:"space-between",alignItems:"center",gap:12}}>
+              <div>
+                <div style={{fontSize:15,fontWeight:600,color:INK}}>Plan 14 jours</div>
+                <div style={{fontSize:13,color:GREY,marginTop:2}}>{planDone} / {ALL.length} questions faites</div>
+              </div>
+              <button className="text-btn" onClick={()=>{ if(confirm("Abandonner le plan en cours ?")) resetPlan(); }} style={{background:"none",border:"none",color:RED,fontSize:14,whiteSpace:"nowrap"}}>Abandonner</button>
+            </div>}
+            {aiBank.length>0&&<div style={{background:CARD,border:"1px solid "+LINE,borderRadius:RADIUS,padding:20,display:"flex",justifyContent:"space-between",alignItems:"center",gap:12}}>
+              <div>
+                <div style={{fontSize:15,fontWeight:600,color:INK}}>Mes questions IA</div>
+                <div style={{fontSize:13,color:GREY,marginTop:2}}>{aiBank.length} question{aiBank.length>1?"s":""} enregistrée{aiBank.length>1?"s":""} sur cet appareil</div>
+              </div>
+              <button className="text-btn" onClick={()=>{ if(confirm("Supprimer toutes tes questions générées par IA ?")){ setAiBank([]); saveAiBank([]); } }} style={{background:"none",border:"none",color:RED,fontSize:14,whiteSpace:"nowrap"}}>Vider</button>
+            </div>}
+            {(stats.lifetimeAnswered>0||hasSession)&&<div style={{background:CARD,border:"1px solid "+LINE,borderRadius:RADIUS,padding:20,display:"flex",justifyContent:"space-between",alignItems:"center",gap:12}}>
+              <div>
+                <div style={{fontSize:15,fontWeight:600,color:INK}}>Progression</div>
+                <div style={{fontSize:13,color:GREY,marginTop:2}}>{stats.lifetimeAnswered} question{stats.lifetimeAnswered>1?"s":""} répondue{stats.lifetimeAnswered>1?"s":""} au total</div>
+              </div>
+              <button className="text-btn" onClick={()=>{ if(confirm("Réinitialiser toute ta progression ?")){ setStats(emptyStats); setHasSession(false); saveProgress({stats:emptyStats,session:null}); } }} style={{background:"none",border:"none",color:RED,fontSize:14,whiteSpace:"nowrap"}}>Réinitialiser</button>
+            </div>}
+            {!plan&&aiBank.length===0&&stats.lifetimeAnswered===0&&!hasSession&&<div style={{fontSize:14,color:GREY,padding:"4px 2px"}}>Rien à afficher pour l'instant — commence à réviser pour voir ta progression ici.</div>}
+          </div>
+
+          <SectionLabel icon={CheckIcon}>Accessibilité</SectionLabel>
+          <div style={{background:CARD,border:"1px solid "+LINE,borderRadius:RADIUS,padding:20,marginBottom:28,display:"flex",justifyContent:"space-between",alignItems:"center",gap:12}}>
+            <div>
+              <div style={{fontSize:15,fontWeight:600,color:INK}}>Réduire les animations</div>
+              <div style={{fontSize:13,color:GREY,marginTop:2,lineHeight:1.45}}>Désactive les transitions et animations dans toute l'app, en plus du réglage de ton appareil.</div>
+            </div>
+            <button role="switch" aria-checked={reduceMotion} aria-label="Réduire les animations" onClick={()=>setReduceMotion(v=>!v)}
+              style={{flexShrink:0,width:46,height:28,borderRadius:14,border:"none",background:reduceMotion?BLUE:TRACK_BG,position:"relative",transition:"background-color .15s ease"}}>
+              <span style={{position:"absolute",top:3,left:reduceMotion?21:3,width:22,height:22,borderRadius:"50%",background:"#fff",boxShadow:SHADOW_XS,transition:"left .15s ease"}}/>
+            </button>
+          </div>
+
+          <SectionLabel icon={SparkleIcon}>Tuteur</SectionLabel>
+          <div style={{background:CARD,border:"1px solid "+LINE,borderRadius:RADIUS,padding:24,boxShadow:SHADOW_CARD,display:"flex",alignItems:"center",gap:14,marginBottom:12}}>
+            <div style={{width:40,height:40,borderRadius:12,background:GRADIENT_BRAND,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
               <SparkleIcon size={20} style={{color:"#fff"}}/>
             </div>
             <div style={{flex:1}}>
               <div style={{fontSize:16,fontWeight:600,color:INK,display:"flex",alignItems:"center",gap:7}}>
                 Intelligence
-                <span style={{fontSize:11,fontWeight:700,color:"#0a7d33",background:"#eafaef",padding:"3px 8px",borderRadius:6,letterSpacing:"0.03em"}}>ACTIVE</span>
+                <span style={{fontSize:11,fontWeight:700,color:GREEN_TEXT,background:GREEN_BG,padding:"3px 8px",borderRadius:6,letterSpacing:"0.03em"}}>ACTIVE</span>
               </div>
               <div style={{fontSize:13,color:GREY,marginTop:3}}>{isCustomWorker()?"Serveur personnalisé":"Serveur intégré à l'app"}</div>
             </div>
           </div>
 
-          <details style={{marginTop:12}}>
+          <details style={{marginBottom:28}}>
             <summary style={{fontSize:14,color:GREY,cursor:"pointer",padding:"10px 4px",listStyle:"none",display:"flex",alignItems:"center",gap:6}}>
               <GearIcon size={15}/>Avancé — utiliser mon propre serveur
             </summary>
-            <div style={{background:CARD,borderRadius:RADIUS,padding:24,boxShadow:"0 2px 14px rgba(0,0,0,0.05)",marginTop:8}}>
+            <div style={{background:CARD,border:"1px solid "+LINE,borderRadius:RADIUS,padding:24,boxShadow:SHADOW_CARD,marginTop:8}}>
               <label style={{fontSize:13,fontWeight:600,color:GREY,textTransform:"uppercase",letterSpacing:"0.04em"}}>Adresse du serveur</label>
-              <input value={workerUrlInput} onChange={e=>setWorkerUrlInput(e.target.value)} placeholder={DEFAULT_WORKER} style={{width:"100%",borderRadius:12,border:"1px solid "+LINE,padding:"14px 16px",fontSize:16,outline:"none",boxSizing:"border-box",marginTop:10,background:BG}}/>
-              <p style={{fontSize:13,color:GREY,lineHeight:1.6,marginTop:12,marginBottom:0}}>Laisse vide pour utiliser le serveur intégré. Pour héberger le tien : déploie <code style={{background:BG,padding:"2px 6px",borderRadius:6}}>worker.js</code> sur <a href="https://dash.cloudflare.com/sign-up" target="_blank" rel="noopener" style={{color:BLUE}}>Cloudflare Workers</a> avec ta clé <code style={{background:BG,padding:"2px 6px",borderRadius:6}}>ANTHROPIC_API_KEY</code>.</p>
+              <input value={workerUrlInput} onChange={e=>setWorkerUrlInput(e.target.value)} placeholder={DEFAULT_WORKER} style={{width:"100%",borderRadius:12,border:"1px solid "+LINE,padding:"14px 16px",fontSize:16,outline:"none",boxSizing:"border-box",marginTop:10,background:BG,color:INK}}/>
+              <p style={{fontSize:13,color:GREY,lineHeight:1.6,marginTop:12,marginBottom:0}}>Laisse vide pour utiliser le serveur intégré. Pour héberger le tien : déploie <code style={{background:CODE_BG,padding:"2px 6px",borderRadius:6}}>worker.js</code> sur <a href="https://dash.cloudflare.com/sign-up" target="_blank" rel="noopener" style={{color:BLUE}}>Cloudflare Workers</a> avec ta clé <code style={{background:CODE_BG,padding:"2px 6px",borderRadius:6}}>ANTHROPIC_API_KEY</code>.</p>
               <div style={{marginTop:16,display:"flex",gap:10}}>
                 <PillButton onClick={()=>{ setWorkerUrl(workerUrlInput.trim()); alert(workerUrlInput.trim()?"Serveur personnalisé enregistré.":"Retour au serveur intégré."); setShowSettings(false); }} style={{flex:1}}>Enregistrer</PillButton>
                 {isCustomWorker()&&<PillButton kind="grey" onClick={()=>{ setWorkerUrl(""); setWorkerUrlInput(""); alert("Retour au serveur intégré."); }}>Réinitialiser</PillButton>}
               </div>
             </div>
           </details>
-          {plan&&<div style={{background:CARD,borderRadius:RADIUS,padding:20,marginTop:12,display:"flex",justifyContent:"space-between",alignItems:"center",gap:12}}>
-            <div>
-              <div style={{fontSize:15,fontWeight:600,color:INK}}>Plan 14 jours</div>
-              <div style={{fontSize:13,color:GREY,marginTop:2}}>{planDone} / {ALL.length} questions faites</div>
-            </div>
-            <button className="text-btn" onClick={()=>{ if(confirm("Abandonner le plan en cours ?")) resetPlan(); }} style={{background:"none",border:"none",color:RED,fontSize:14,whiteSpace:"nowrap"}}>Abandonner</button>
-          </div>}
-          {aiBank.length>0&&<div style={{background:CARD,borderRadius:RADIUS,padding:20,marginTop:12,display:"flex",justifyContent:"space-between",alignItems:"center",gap:12}}>
-            <div>
-              <div style={{fontSize:15,fontWeight:600,color:INK}}>Mes questions IA</div>
-              <div style={{fontSize:13,color:GREY,marginTop:2}}>{aiBank.length} question{aiBank.length>1?"s":""} enregistrée{aiBank.length>1?"s":""} sur cet appareil</div>
-            </div>
-            <button className="text-btn" onClick={()=>{ if(confirm("Supprimer toutes tes questions générées par IA ?")){ setAiBank([]); saveAiBank([]); } }} style={{background:"none",border:"none",color:RED,fontSize:14,whiteSpace:"nowrap"}}>Vider</button>
-          </div>}
-        </div>
+
+          <SectionLabel icon={InfoIcon}>À propos</SectionLabel>
+          <div style={{background:CARD,border:"1px solid "+LINE,borderRadius:RADIUS,padding:24}}>
+            <Wordmark size={26}/>
+            <p style={{fontSize:14,color:GREY,lineHeight:1.6,margin:"14px 0 0"}}>Entraînement TCF B2 : structure de la langue et compréhension écrite, avec tuteur IA. {ALL.length} questions, un plan de 14 jours, et des explications sur mesure — tout reste stocké sur cet appareil.</p>
+          </div>
+        </main>
       </div>
     );
   }
@@ -1950,142 +2231,151 @@ function App(){
   if(phase==="home"){
     const mastered=stats.masteredIds.length, struggling=stats.strugglingIds.length;
     const pct=stats.lifetimeAnswered>0?Math.round((stats.lifetimeCorrect/stats.lifetimeAnswered)*100):0;
+
+    // One obvious primary action, chosen by what's most relevant right now:
+    // an in-progress session beats today's plan slice beats a cold start.
+    const planCta = plan&&!planFinished&&planDueIds.length>0
+      ? { label: planOverdue>0?`Rattraper ${planDueIds.length} question${planDueIds.length>1?"s":""}`:`Faire les ${planDueIds.length} question${planDueIds.length>1?"s":""} du jour`, fn:startPlanSession }
+      : null;
+    const heroCta = hasSession
+      ? { label:"Reprendre", fn:resumeSession }
+      : (planCta || { label:"Commencer", fn:()=>start("all","all") });
+    const planCtaShownInHero = heroCta.fn===startPlanSession;
+
     return (
       <div style={{minHeight:"100vh",background:BG}}>
-        {/* Nav bar */}
-        <div style={{position:"sticky",top:0,zIndex:10,background:"rgba(251,251,253,0.8)",backdropFilter:"blur(20px)",borderBottom:"1px solid "+LINE,padding:"calc(env(safe-area-inset-top) + 12px) 22px 12px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+        <header style={{position:"sticky",top:0,zIndex:10,background:OVERLAY,backdropFilter:"blur(20px)",borderBottom:"1px solid "+LINE,padding:"calc(env(safe-area-inset-top) + 12px) 22px 12px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
           <Wordmark/>
           <button className="text-btn" onClick={()=>setShowSettings(true)} aria-label="Réglages" style={{background:"none",border:"none",color:GREY,padding:6,display:"flex"}}><GearIcon size={22}/></button>
-        </div>
+        </header>
 
-        <div style={{maxWidth:600,margin:"0 auto",padding:"0 22px 60px"}}>
-          {/* Hero */}
-          <div className="fade" style={{textAlign:"center",padding:"56px 0 44px"}}>
-            <div style={{fontSize:15,color:BLUE,fontWeight:600,letterSpacing:"-0.01em",marginBottom:10}}>Entraînement TCF</div>
-            <h1 style={{fontSize:46,lineHeight:1.05,fontWeight:600,letterSpacing:"-0.035em",margin:"0 0 16px"}}>Maîtrise ton<br/>français.</h1>
-            <p style={{fontSize:19,color:GREY,letterSpacing:"-0.01em",margin:"0 0 30px",lineHeight:1.4}}>{ALL.length} questions niveau B2.{hasWorker?" Avec tuteur IA.":""}</p>
-            <div style={{display:"flex",gap:14,justifyContent:"center",flexWrap:"wrap"}}>
-              <PillButton onClick={hasSession?resumeSession:()=>start("all","all")}>{hasSession?"Reprendre":"Tout commencer"}</PillButton>
-              <PillButton kind="secondary" onClick={()=>start("rapid")}>Mode rapide</PillButton>
+        <main ref={mainRef} tabIndex={-1} className="app-shell" style={{outline:"none",maxWidth:640,margin:"0 auto",padding:"0 22px 64px"}}>
+          {/* Hero — the one clear next step */}
+          <div className="fade hero-pad" style={{textAlign:"center",padding:"52px 0 40px"}}>
+            <div style={{fontSize:14,color:BLUE,fontWeight:600,letterSpacing:"-0.01em",marginBottom:10}}>Entraînement TCF</div>
+            <h1 className="hero-title" style={{fontSize:44,lineHeight:1.08,fontWeight:600,letterSpacing:"-0.035em",margin:"0 0 14px"}}>Maîtrise ton<br/>français.</h1>
+            <p style={{fontSize:18,color:GREY,letterSpacing:"-0.01em",margin:"0 0 28px",lineHeight:1.4}}>{ALL.length} questions niveau B2.{hasWorker?" Avec tuteur IA.":""}</p>
+            <PillButton onClick={heroCta.fn} style={{minWidth:220}}>{heroCta.label}</PillButton>
+            <div style={{display:"flex",gap:18,justifyContent:"center",marginTop:16,flexWrap:"wrap"}}>
+              <button className="text-btn" onClick={()=>start("rapid")} style={{background:"none",border:"none",color:GREY,fontSize:14,fontWeight:500}}>Mode rapide</button>
+              {hasSession&&<button className="text-btn" onClick={()=>start("all","all")} style={{background:"none",border:"none",color:GREY,fontSize:14}}>Recommencer depuis le début</button>}
             </div>
-            <div style={{fontSize:13,color:GREY,marginTop:12}}>Mode rapide : 15 questions de compréhension écrite + 5 de structure de la langue</div>
-            {hasSession&&<div style={{marginTop:10}}><button className="text-btn" onClick={()=>start("all","all")} style={{background:"none",border:"none",color:GREY,fontSize:14}}>Recommencer depuis le début</button></div>}
           </div>
 
-          {/* Plan 14 jours */}
-          <div className="fade" style={{background:CARD,borderRadius:22,padding:"26px 28px",boxShadow:"0 2px 18px rgba(0,0,0,0.05)",marginBottom:18}}>
-            {!plan ? (
-              <>
-                <div style={{display:"flex",alignItems:"center",gap:9,marginBottom:4}}>
-                  <TargetIcon size={19} style={{color:BLUE}}/>
-                  <div style={{fontSize:21,fontWeight:600,letterSpacing:"-0.02em"}}>Plan 14 jours</div>
-                </div>
-                <p style={{fontSize:15,color:GREY,margin:"0 0 18px",lineHeight:1.45}}>Termine les {ALL.length} questions en deux semaines — environ {planPerDay} par jour. Si tu sautes un jour, le retard est reporté automatiquement.</p>
-                <PillButton onClick={startPlan} style={{width:"100%"}}>Commencer le plan</PillButton>
-              </>
-            ) : planFinished ? (
-              <div style={{textAlign:"center"}}>
-                <CheckIcon size={30} stroke={2.5} style={{color:GREEN,margin:"0 auto 12px"}}/>
-                <div style={{fontSize:21,fontWeight:600,letterSpacing:"-0.02em",marginBottom:4}}>Plan terminé</div>
-                <p style={{fontSize:15,color:GREY,margin:"0 0 18px",lineHeight:1.45}}>Tu as vu les {ALL.length} questions. Bravo.</p>
-                <PillButton kind="secondary" onClick={()=>{ if(confirm("Recommencer un nouveau plan de 14 jours ?")) startPlan(); }}>Nouveau plan</PillButton>
-              </div>
-            ) : (
-              <>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:14}}>
-                  <div style={{display:"flex",alignItems:"center",gap:9}}>
-                    <TargetIcon size={19} style={{color:BLUE}}/>
-                    <div style={{fontSize:21,fontWeight:600,letterSpacing:"-0.02em"}}>Plan 14 jours</div>
-                  </div>
-                  <div style={{fontSize:15,color:GREY,fontWeight:500}}>{planOverdue>0?"Jour "+PLAN_DAYS+"+":"Jour "+planDayNum+" / "+PLAN_DAYS}</div>
-                </div>
-                <div style={{height:6,background:"#e8e8ed",borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",width:`${(planDone/ALL.length)*100}%`,background:BLUE,borderRadius:3,transition:"width .5s"}}/></div>
-                <div style={{fontSize:13,color:GREY,marginTop:10,marginBottom:18}}>{planDone} / {ALL.length} questions faites · {Math.round((planDone/ALL.length)*100)}%</div>
-                {planDueIds.length>0 ? (
+          <div className="home-grid">
+            <div>
+              {/* Plan 14 jours */}
+              <SectionLabel icon={TargetIcon}>Plan 14 jours</SectionLabel>
+              <div className="fade" style={{background:CARD,border:"1px solid "+LINE,borderRadius:20,padding:"22px 24px",boxShadow:SHADOW_CARD,marginBottom:26}}>
+                {!plan ? (
                   <>
-                    <PillButton onClick={startPlanSession} style={{width:"100%"}}>{planOverdue>0?"Rattraper "+planDueIds.length+" question"+(planDueIds.length>1?"s":""):"Faire les "+planDueIds.length+" question"+(planDueIds.length>1?"s":"")+" du jour"}</PillButton>
-                    {planOverdue>0&&<div style={{fontSize:13,color:"#bf8700",marginTop:12,background:"#fff8e6",padding:"10px 14px",borderRadius:10}}>Les 14 jours sont écoulés — il te reste {planDueIds.length} question{planDueIds.length>1?"s":""} à rattraper.</div>}
+                    <p style={{fontSize:15,color:GREY,margin:"0 0 16px",lineHeight:1.45}}>Termine les {ALL.length} questions en deux semaines — environ {planPerDay} par jour. Si tu sautes un jour, le retard est reporté automatiquement.</p>
+                    <PillButton onClick={startPlan} style={{width:"100%"}}>Commencer le plan</PillButton>
                   </>
-                ) : (
-                  <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,background:"#eafaef",color:"#0a7d33",padding:"13px 16px",borderRadius:12,fontSize:15,fontWeight:500}}>
-                    <CheckIcon size={17} stroke={2.5}/>Objectif du jour atteint
+                ) : planFinished ? (
+                  <div style={{textAlign:"center"}}>
+                    <CheckIcon size={26} stroke={2.5} style={{color:GREEN,margin:"0 auto 10px"}}/>
+                    <div style={{fontSize:17,fontWeight:600,letterSpacing:"-0.02em",marginBottom:4}}>Plan terminé</div>
+                    <p style={{fontSize:14,color:GREY,margin:"0 0 16px",lineHeight:1.45}}>Tu as vu les {ALL.length} questions. Bravo.</p>
+                    <PillButton kind="secondary" onClick={()=>{ if(confirm("Recommencer un nouveau plan de 14 jours ?")) startPlan(); }}>Nouveau plan</PillButton>
                   </div>
+                ) : (
+                  <>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:12}}>
+                      <div style={{fontSize:14,color:INK,fontWeight:500}}>{planOverdue>0?"Jour "+PLAN_DAYS+"+":"Jour "+planDayNum+" / "+PLAN_DAYS}</div>
+                      <div style={{fontSize:13,color:GREY}}>{planDone} / {ALL.length} · {Math.round((planDone/ALL.length)*100)}%</div>
+                    </div>
+                    <div style={{height:6,background:TRACK_BG,borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",width:`${(planDone/ALL.length)*100}%`,background:BLUE,borderRadius:3,transition:"width .5s"}}/></div>
+                    {planDueIds.length>0 ? (
+                      <>
+                        {!planCtaShownInHero&&<PillButton onClick={startPlanSession} style={{width:"100%",marginTop:16}}>{planCta.label}</PillButton>}
+                        {planCtaShownInHero&&<div style={{fontSize:13,color:GREY,marginTop:14}}>C'est ton action du haut de l'écran ↑</div>}
+                        {planOverdue>0&&<div style={{fontSize:13,color:AMBER_TEXT,marginTop:12,background:AMBER_BG,padding:"10px 14px",borderRadius:10}}>Les 14 jours sont écoulés — il te reste {planDueIds.length} question{planDueIds.length>1?"s":""} à rattraper.</div>}
+                      </>
+                    ) : (
+                      <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,background:GREEN_BG,color:GREEN_TEXT,padding:"12px 16px",borderRadius:12,fontSize:14,fontWeight:500,marginTop:16}}>
+                        <CheckIcon size={16} stroke={2.5}/>Objectif du jour atteint
+                      </div>
+                    )}
+                  </>
                 )}
-              </>
-            )}
-          </div>
+              </div>
 
-          {/* Thèmes */}
-          <div className="fade" style={{display:"flex",gap:14,marginBottom:18,flexWrap:"wrap"}}>
-            <button className="hcard" onClick={()=>start("all","grammar")} style={{flex:"1 1 46%",minWidth:150,background:CARD,border:"1px solid "+LINE,borderRadius:18,padding:"20px 18px",textAlign:"left",boxShadow:"0 2px 14px rgba(0,0,0,0.05)"}}>
-              <div style={{width:36,height:36,borderRadius:10,background:"#eaf3fe",color:BLUE,display:"flex",alignItems:"center",justifyContent:"center",marginBottom:12}}><TypeIcon size={19}/></div>
-              <div style={{fontSize:17,fontWeight:600,letterSpacing:"-0.02em",color:INK,marginBottom:3}}>Structure de la langue</div>
-              <div style={{fontSize:14,color:GREY}}>{GRAMMAR_COUNT} questions · phrases à trou</div>
-            </button>
-            <button className="hcard" onClick={()=>start("all","reading")} style={{flex:"1 1 46%",minWidth:150,background:CARD,border:"1px solid "+LINE,borderRadius:18,padding:"20px 18px",textAlign:"left",boxShadow:"0 2px 14px rgba(0,0,0,0.05)"}}>
-              <div style={{width:36,height:36,borderRadius:10,background:"#eaf3fe",color:BLUE,display:"flex",alignItems:"center",justifyContent:"center",marginBottom:12}}><BookIcon size={19}/></div>
-              <div style={{fontSize:17,fontWeight:600,letterSpacing:"-0.02em",color:INK,marginBottom:3}}>Compréhension écrite</div>
-              <div style={{fontSize:14,color:GREY}}>{READING_COUNT} questions · textes</div>
-            </button>
-          </div>
+              {/* Pratique */}
+              <SectionLabel icon={BookIcon}>Pratique</SectionLabel>
+              <div className="fade" style={{display:"flex",gap:12,marginBottom:16,flexWrap:"wrap"}}>
+                <button className="hcard" onClick={()=>start("all","grammar")} style={{flex:"1 1 30%",minWidth:140,background:CARD,border:"1px solid "+LINE,borderRadius:16,padding:"18px 16px",textAlign:"left",boxShadow:SHADOW_XS}}>
+                  <div style={{width:32,height:32,borderRadius:9,background:QUOTE_BG,color:BLUE,display:"flex",alignItems:"center",justifyContent:"center",marginBottom:11}}><TypeIcon size={17}/></div>
+                  <div style={{fontSize:15,fontWeight:600,letterSpacing:"-0.01em",color:INK,marginBottom:2}}>Structure de la langue</div>
+                  <div style={{fontSize:13,color:GREY}}>{GRAMMAR_COUNT} questions</div>
+                </button>
+                <button className="hcard" onClick={()=>start("all","reading")} style={{flex:"1 1 30%",minWidth:140,background:CARD,border:"1px solid "+LINE,borderRadius:16,padding:"18px 16px",textAlign:"left",boxShadow:SHADOW_XS}}>
+                  <div style={{width:32,height:32,borderRadius:9,background:QUOTE_BG,color:BLUE,display:"flex",alignItems:"center",justifyContent:"center",marginBottom:11}}><BookIcon size={17}/></div>
+                  <div style={{fontSize:15,fontWeight:600,letterSpacing:"-0.01em",color:INK,marginBottom:2}}>Compréhension écrite</div>
+                  <div style={{fontSize:13,color:GREY}}>{READING_COUNT} questions</div>
+                </button>
+                <button className="hcard" onClick={()=>start("rapid")} style={{flex:"1 1 30%",minWidth:140,background:CARD,border:"1px solid "+LINE,borderRadius:16,padding:"18px 16px",textAlign:"left",boxShadow:SHADOW_XS}}>
+                  <div style={{width:32,height:32,borderRadius:9,background:QUOTE_BG,color:BLUE,display:"flex",alignItems:"center",justifyContent:"center",marginBottom:11}}><ZapIcon size={17}/></div>
+                  <div style={{fontSize:15,fontWeight:600,letterSpacing:"-0.01em",color:INK,marginBottom:2}}>Mode rapide</div>
+                  <div style={{fontSize:13,color:GREY}}>20 questions mixtes</div>
+                </button>
+              </div>
 
-          {/* Par niveau */}
-          <div className="fade" style={{background:CARD,borderRadius:22,padding:"26px 28px",boxShadow:"0 2px 18px rgba(0,0,0,0.05)",marginBottom:18}}>
-            <div style={{fontSize:21,fontWeight:600,letterSpacing:"-0.02em",marginBottom:4}}>Par niveau</div>
-            <p style={{fontSize:15,color:GREY,margin:"0 0 18px",lineHeight:1.45}}>Cible ton niveau. Pour le TCF B2, concentre-toi sur B1–C1.</p>
-            <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-              {LEVELS.map(lv=>{
-                const n=levelCounts[lv]||0;
-                return (
-                  <button key={lv} className="hcard" disabled={n===0} onClick={()=>start("level","all",lv)}
-                    style={{flex:"1 1 30%",minWidth:88,padding:"14px 10px",borderRadius:14,border:"1px solid "+(n?LEVEL_COLORS[lv]+"33":LINE),background:n?LEVEL_BG[lv]:BG,opacity:n?1:0.45,textAlign:"center",cursor:n?"pointer":"default"}}>
-                    <div style={{fontSize:17,fontWeight:700,color:n?LEVEL_COLORS[lv]:GREY,letterSpacing:"-0.01em"}}>{lv}</div>
-                    <div style={{fontSize:12,color:GREY,marginTop:2}}>{n} question{n>1?"s":""}</div>
-                  </button>
-                );
-              })}
-            </div>
-            <div style={{fontSize:12,color:GREY,marginTop:14,lineHeight:1.5}}>Niveaux estimés à titre indicatif (points de grammaire testés et complexité des textes), pas une notation officielle.</div>
-          </div>
-
-          {/* Stats card */}
-          <div className="fade" style={{background:CARD,borderRadius:22,padding:"30px 28px",boxShadow:"0 2px 18px rgba(0,0,0,0.05)",marginBottom:18}}>
-            <div style={{display:"flex",justifyContent:"space-around",textAlign:"center",marginBottom:24}}>
-              {[{v:pct+"%",l:"Réussite",I:TargetIcon},{v:mastered,l:"Maîtrisées",I:CheckIcon},{v:struggling,l:"À revoir",I:RefreshIcon}].map((s,i)=>(
-                <div key={i}>
-                  <s.I size={16} stroke={2} style={{color:GREY,margin:"0 auto 6px"}}/>
-                  <div style={{fontSize:32,fontWeight:600,letterSpacing:"-0.03em"}}>{s.v}</div>
-                  <div style={{fontSize:13,color:GREY,marginTop:2}}>{s.l}</div>
+              {/* Par niveau — lighter, nested under Pratique rather than its own boxed section */}
+              <div className="fade" style={{marginBottom:26}}>
+                <div style={{fontSize:13,color:GREY,margin:"4px 0 10px"}}>Ou cible ton niveau (B1–C1 pour le TCF B2) :</div>
+                <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                  {LEVELS.map(lv=>{
+                    const n=levelCounts[lv]||0;
+                    return (
+                      <button key={lv} className="hcard" disabled={n===0} onClick={()=>start("level","all",lv)}
+                        style={{flex:"1 1 30%",minWidth:82,padding:"12px 8px",borderRadius:12,border:"1px solid "+(n?LEVEL_COLORS[lv]+"33":LINE),background:n?LEVEL_BG[lv]:BG,opacity:n?1:0.45,textAlign:"center",cursor:n?"pointer":"default"}}>
+                        <div style={{fontSize:15,fontWeight:700,color:n?LEVEL_COLORS[lv]:GREY,letterSpacing:"-0.01em"}}>{lv}</div>
+                        <div style={{fontSize:11,color:GREY,marginTop:1}}>{n}</div>
+                      </button>
+                    );
+                  })}
                 </div>
-              ))}
+              </div>
+
+              {struggling>0&&(
+                <div className="fade hcard" onClick={()=>{ const pool=shuffle([...ALL,...aiBank].filter(qq=>stats.strugglingIds.includes(qq.id))); setMode("struggling"); setQuestions(pool); setCurrent(0); setSelected(null); setScore(0); setWrong([]); setPhase("quiz"); setHasSession(true); saveProgress({stats,session:{order:pool.map(qq=>qq.id),current:0,score:0,wrong:[],mode:"struggling"}}); }} style={{background:CARD,border:"1px solid "+LINE,borderRadius:16,padding:"18px 20px",boxShadow:SHADOW_XS,marginBottom:16,display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}}>
+                  <div><div style={{fontSize:15,fontWeight:600,letterSpacing:"-0.01em"}}>Réviser mes erreurs</div><div style={{fontSize:13,color:GREY,marginTop:2}}>{struggling} question{struggling>1?"s":""} à revoir</div></div>
+                  <ChevronRight size={19} style={{color:BLUE}}/>
+                </div>
+              )}
             </div>
-            <div style={{height:6,background:"#e8e8ed",borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",width:`${(mastered/ALL.length)*100}%`,background:BLUE,borderRadius:3,transition:"width .5s"}}/></div>
-            <div style={{fontSize:13,color:GREY,marginTop:12,textAlign:"center"}}>{Math.round((mastered/ALL.length)*100)}% du programme maîtrisé{stats.sessions>0?` · Meilleur score ${stats.bestPct}%`:""}</div>
+
+            <div>
+              {/* Progression */}
+              <SectionLabel icon={TargetIcon}>Progression</SectionLabel>
+              <div className="fade" style={{background:CARD,border:"1px solid "+LINE,borderRadius:20,padding:"22px 22px",marginBottom:26}}>
+                <div style={{display:"flex",justifyContent:"space-around",textAlign:"center",marginBottom:18}}>
+                  {[{v:pct+"%",l:"Réussite",I:TargetIcon},{v:mastered,l:"Maîtrisées",I:CheckIcon},{v:struggling,l:"À revoir",I:RefreshIcon}].map((s,i)=>(
+                    <div key={i}>
+                      <s.I size={14} stroke={2} style={{color:GREY,margin:"0 auto 5px"}}/>
+                      <div style={{fontSize:24,fontWeight:600,letterSpacing:"-0.02em"}}>{s.v}</div>
+                      <div style={{fontSize:12,color:GREY,marginTop:2}}>{s.l}</div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{height:5,background:TRACK_BG,borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",width:`${(mastered/ALL.length)*100}%`,background:BLUE,borderRadius:3,transition:"width .5s"}}/></div>
+                <div style={{fontSize:12,color:GREY,marginTop:10,textAlign:"center"}}>{Math.round((mastered/ALL.length)*100)}% du programme maîtrisé{stats.sessions>0?` · Meilleur score ${stats.bestPct}%`:""}</div>
+              </div>
+
+              {/* Intelligence */}
+              <SectionLabel icon={SparkleIcon}>Intelligence</SectionLabel>
+              <div className="fade" style={{marginBottom:16}}>
+                <p style={{fontSize:13,color:GREY,margin:"0 0 12px",lineHeight:1.45}}>Un tuteur, des questions infinies, des explications sur mesure.</p>
+                <div style={{display:"flex",flexDirection:"column",gap:9}}>
+                  <button className="hcard" onClick={()=>setShowTutor(true)} style={{width:"100%",padding:"14px 16px",borderRadius:13,border:"1px solid "+LINE,background:CARD,boxShadow:SHADOW_XS,fontSize:15,fontWeight:500,textAlign:"left",display:"flex",justifyContent:"space-between",alignItems:"center",color:INK}}><span style={{display:"flex",alignItems:"center",gap:9}}><MessageIcon size={16} style={{color:BLUE}}/>Tuteur IA</span><ChevronRight size={17} style={{color:BLUE}}/></button>
+                  <button className="hcard" onClick={()=>{ start("ai"); setTimeout(generateAIQuestion,50); }} style={{width:"100%",padding:"14px 16px",borderRadius:13,border:"1px solid "+LINE,background:CARD,boxShadow:SHADOW_XS,fontSize:15,fontWeight:500,textAlign:"left",display:"flex",justifyContent:"space-between",alignItems:"center",color:INK}}><span style={{display:"flex",alignItems:"center",gap:9}}><SparkleIcon size={16} style={{color:BLUE}}/>Question générée par IA</span><ChevronRight size={17} style={{color:BLUE}}/></button>
+                  {aiBank.length>0&&<button className="hcard" onClick={startAIBank} style={{width:"100%",padding:"14px 16px",borderRadius:13,border:"1px solid "+LINE,background:CARD,boxShadow:SHADOW_XS,fontSize:15,fontWeight:500,textAlign:"left",display:"flex",justifyContent:"space-between",alignItems:"center",color:INK}}><span style={{display:"flex",alignItems:"center",gap:9}}><BookIcon size={16} style={{color:BLUE}}/>Mes questions IA <span style={{color:GREY,fontWeight:400}}>· {aiBank.length}</span></span><ChevronRight size={17} style={{color:BLUE}}/></button>}
+                </div>
+              </div>
+            </div>
           </div>
-
-          {/* AI section */}
-          <div className="fade" style={{background:CARD,borderRadius:22,padding:"26px 28px",boxShadow:"0 2px 18px rgba(0,0,0,0.05)",marginBottom:18}}>
-            <div style={{display:"flex",alignItems:"center",gap:9,marginBottom:4}}>
-              <SparkleIcon size={19} style={{color:BLUE}}/>
-              <div style={{fontSize:21,fontWeight:600,letterSpacing:"-0.02em"}}>Intelligence</div>
-            </div>
-            <p style={{fontSize:15,color:GREY,margin:"0 0 18px",lineHeight:1.45}}>Un tuteur, des questions infinies, des explications sur mesure.</p>
-            <div style={{display:"flex",flexDirection:"column",gap:10}}>
-              <button className="hcard" onClick={()=>setShowTutor(true)} style={{width:"100%",padding:"15px 18px",borderRadius:14,border:"1px solid "+LINE,background:BG,fontSize:16,fontWeight:500,textAlign:"left",display:"flex",justifyContent:"space-between",alignItems:"center",color:INK}}><span style={{display:"flex",alignItems:"center",gap:10}}><MessageIcon size={17} style={{color:BLUE}}/>Tuteur IA</span><ChevronRight size={18} style={{color:BLUE}}/></button>
-              <button className="hcard" onClick={()=>{ start("ai"); setTimeout(generateAIQuestion,50); }} style={{width:"100%",padding:"15px 18px",borderRadius:14,border:"1px solid "+LINE,background:BG,fontSize:16,fontWeight:500,textAlign:"left",display:"flex",justifyContent:"space-between",alignItems:"center",color:INK}}><span style={{display:"flex",alignItems:"center",gap:10}}><SparkleIcon size={17} style={{color:BLUE}}/>Question générée par IA</span><ChevronRight size={18} style={{color:BLUE}}/></button>
-              {aiBank.length>0&&<button className="hcard" onClick={startAIBank} style={{width:"100%",padding:"15px 18px",borderRadius:14,border:"1px solid "+LINE,background:BG,fontSize:16,fontWeight:500,textAlign:"left",display:"flex",justifyContent:"space-between",alignItems:"center",color:INK}}><span style={{display:"flex",alignItems:"center",gap:10}}><BookIcon size={17} style={{color:BLUE}}/>Mes questions IA <span style={{color:GREY,fontWeight:400}}>· {aiBank.length}</span></span><ChevronRight size={18} style={{color:BLUE}}/></button>}
-            </div>
-          </div>
-
-          {struggling>0&&(
-            <div className="fade hcard" onClick={()=>{ const pool=shuffle([...ALL,...aiBank].filter(qq=>stats.strugglingIds.includes(qq.id))); setMode("struggling"); setQuestions(pool); setCurrent(0); setSelected(null); setScore(0); setWrong([]); setPhase("quiz"); setHasSession(true); saveProgress({stats,session:{order:pool.map(qq=>qq.id),current:0,score:0,wrong:[],mode:"struggling"}}); }} style={{background:CARD,borderRadius:22,padding:"22px 28px",boxShadow:"0 2px 18px rgba(0,0,0,0.05)",marginBottom:18,display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}}>
-              <div><div style={{fontSize:17,fontWeight:600,letterSpacing:"-0.02em"}}>Réviser mes erreurs</div><div style={{fontSize:14,color:GREY,marginTop:2}}>{struggling} question{struggling>1?"s":""} à revoir</div></div>
-              <ChevronRight size={20} style={{color:BLUE}}/>
-            </div>
-          )}
-
-          {(stats.lifetimeAnswered>0||hasSession)&&<div style={{textAlign:"center",marginTop:8}}><button className="text-btn" onClick={()=>{ if(confirm("Réinitialiser toute ta progression ?")){ setStats(emptyStats); setHasSession(false); saveProgress({stats:emptyStats,session:null}); } }} style={{background:"none",border:"none",color:GREY,fontSize:14}}>Réinitialiser la progression</button></div>}
-        </div>
+        </main>
       </div>
     );
   }
@@ -2097,14 +2387,14 @@ function App(){
   if(phase==="quiz"&&mode==="ai"&&(aiLoading||!aiQuestion)){
     return (
       <div style={{minHeight:"100vh",background:BG}}>
-        <div style={{position:"sticky",top:0,zIndex:10,background:"rgba(251,251,253,0.8)",backdropFilter:"blur(20px)",borderBottom:"1px solid "+LINE,padding:"calc(env(safe-area-inset-top) + 12px) 22px 12px"}}>
+        <header style={{position:"sticky",top:0,zIndex:10,background:OVERLAY,backdropFilter:"blur(20px)",borderBottom:"1px solid "+LINE,padding:"calc(env(safe-area-inset-top) + 12px) 22px 12px"}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",maxWidth:600,margin:"0 auto"}}>
             <button className="text-btn" onClick={()=>{setAiQuestion(null);setAiError("");setPhase("home");}} style={{background:"none",border:"none",color:BLUE,fontSize:16,padding:0,display:"flex",alignItems:"center",gap:2}}><ChevronLeft size={19}/>Accueil</button>
             <span style={{fontSize:15,color:GREY,fontWeight:500}}>Question IA</span>
             <div style={{width:20}}/>
           </div>
-        </div>
-        <div style={{maxWidth:480,margin:"0 auto",padding:"22vh 22px 60px",textAlign:"center"}}>
+        </header>
+        <main ref={mainRef} tabIndex={-1} style={{outline:"none",maxWidth:480,margin:"0 auto",padding:"22vh 22px 60px",textAlign:"center"}} aria-live="polite">
           {aiLoading
             ? <div className="fade">
                 <SparkleIcon size={30} style={{color:BLUE,margin:"0 auto 18px"}}/>
@@ -2115,7 +2405,7 @@ function App(){
                 <p style={{fontSize:16,color:INK,margin:"0 0 20px",lineHeight:1.5}}>{aiError||"La génération a échoué."}</p>
                 <PillButton onClick={generateAIQuestion}>Réessayer</PillButton>
               </div>}
-        </div>
+        </main>
       </div>
     );
   }
@@ -2125,38 +2415,38 @@ function App(){
     const isAI=!!aiQuestion;
     return (
       <div style={{minHeight:"100vh",background:BG}}>
-        <div style={{position:"sticky",top:0,zIndex:10,background:"rgba(251,251,253,0.8)",backdropFilter:"blur(20px)",borderBottom:"1px solid "+LINE,padding:"calc(env(safe-area-inset-top) + 12px) 22px 12px"}}>
+        <header style={{position:"sticky",top:0,zIndex:10,background:OVERLAY,backdropFilter:"blur(20px)",borderBottom:"1px solid "+LINE,padding:"calc(env(safe-area-inset-top) + 12px) 22px 12px"}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",maxWidth:600,margin:"0 auto"}}>
             <button className="text-btn" onClick={()=>{setAiQuestion(null);setPhase("home");}} style={{background:"none",border:"none",color:BLUE,fontSize:16,padding:0,display:"flex",alignItems:"center",gap:2}}><ChevronLeft size={19}/>Accueil</button>
             <span style={{fontSize:15,color:GREY,fontWeight:500}}>{isAI?"Question IA":(current+1)+" sur "+total}</span>
             <button className="text-btn" onClick={()=>setShowTutor(true)} aria-label="Tuteur" style={{background:"none",border:"none",color:BLUE,padding:0,display:"flex"}}><MessageIcon size={20}/></button>
           </div>
-          {!isAI&&<div style={{maxWidth:600,margin:"10px auto 0",height:4,background:"#e8e8ed",borderRadius:2,overflow:"hidden"}}><div style={{height:"100%",width:`${progress}%`,background:BLUE,borderRadius:2,transition:"width .3s"}}/></div>}
-        </div>
+          {!isAI&&<div role="progressbar" aria-valuenow={current+1} aria-valuemin={1} aria-valuemax={total} aria-label="Progression du quiz" style={{maxWidth:600,margin:"10px auto 0",height:4,background:TRACK_BG,borderRadius:2,overflow:"hidden"}}><div style={{height:"100%",width:`${progress}%`,background:BLUE,borderRadius:2,transition:"width .3s"}}/></div>}
+        </header>
 
-        <div style={{maxWidth:600,margin:"0 auto",padding:"36px 22px 60px"}}>
-          <div className="fade" key={isAI?"ai":current} style={{marginBottom:30}}>
-            <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:10,marginBottom:16}}>
+        <main ref={mainRef} tabIndex={-1} style={{outline:"none",maxWidth:600,margin:"0 auto",padding:"40px 22px 64px"}}>
+          <div className="fade" key={isAI?"ai":current} style={{marginBottom:34}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:10,marginBottom:18}}>
               <div style={{fontSize:13,color:BLUE,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.05em"}}>{isAI||q.aiGenerated?"Générée par IA":(q.type==="reading"?"Compréhension écrite":"Complétez")}</div>
               {q.level&&<span style={{fontSize:11,fontWeight:700,letterSpacing:"0.04em",color:LEVEL_COLORS[q.level],background:LEVEL_BG[q.level],padding:"3px 8px",borderRadius:6}}>{q.level}</span>}
             </div>
             {q.type==="reading"
               ? <>
-                  <div style={{background:CARD,border:"1px solid "+LINE,borderRadius:RADIUS,padding:"20px 22px",maxHeight:"42vh",overflowY:"auto",fontSize:16,lineHeight:1.7,color:"#33333a",letterSpacing:"-0.01em",whiteSpace:"pre-line",WebkitOverflowScrolling:"touch"}}>{q.passage}</div>
-                  <div style={{fontSize:22,lineHeight:1.4,fontWeight:600,letterSpacing:"-0.02em",textAlign:"center",color:INK,marginTop:22}}>{q.question}</div>
+                  <div style={{background:CARD,border:"1px solid "+LINE,borderRadius:RADIUS,padding:"20px 22px",maxHeight:"42vh",overflowY:"auto",fontSize:16,lineHeight:1.7,color:INK_SOFT,letterSpacing:"-0.01em",whiteSpace:"pre-line",WebkitOverflowScrolling:"touch"}}>{q.passage}</div>
+                  <div style={{fontSize:22,lineHeight:1.4,fontWeight:600,letterSpacing:"-0.02em",textAlign:"center",color:INK,marginTop:24}}>{q.question}</div>
                 </>
-              : <div style={{fontSize:26,lineHeight:1.45,fontWeight:500,letterSpacing:"-0.02em",textAlign:"center",color:INK}}>{renderSentence(q.sentence)}</div>}
+              : <div style={{fontSize:27,lineHeight:1.48,fontWeight:500,letterSpacing:"-0.02em",textAlign:"center",color:INK}}>{renderSentence(q.sentence)}</div>}
           </div>
 
-          <div style={{display:"flex",flexDirection:"column",gap:12}}>
+          <div style={{display:"flex",flexDirection:"column",gap:13}} role="radiogroup" aria-label="Réponses possibles">
             {q.options.map((opt,i)=>{
-              let bg=CARD,border="1px solid "+LINE,color=INK,sh="0 1px 4px rgba(0,0,0,0.04)",opacity=1;
+              let bg=CARD,border="1px solid "+LINE,color=INK,sh=SHADOW_XS,opacity=1;
               if(selected!==null){
-                if(i===q.correct){bg="#eafaef";border="1px solid "+GREEN;color="#0a7d33";}
-                else if(i===selected){bg="#ffeceb";border="1px solid "+RED;color="#c4271f";}
+                if(i===q.correct){bg=GREEN_BG;border="1px solid "+GREEN;color=GREEN_TEXT;}
+                else if(i===selected){bg=RED_BG;border="1px solid "+RED;color=RED_TEXT;}
                 else {bg=CARD;color=GREY;opacity=0.55;}
               } else if(selected===i){border="1px solid "+BLUE;}
-              return (<button key={i} className="opt-row" disabled={selected!==null} onClick={()=>handleSelect(i)} style={{padding:"17px 20px",borderRadius:14,border,background:bg,color,fontSize:17,fontWeight:500,textAlign:"left",display:"flex",alignItems:"center",gap:14,boxShadow:selected===null?sh:"none",letterSpacing:"-0.01em",opacity}}>
+              return (<button key={i} className="opt-row" role="radio" aria-checked={selected===i} disabled={selected!==null} onClick={()=>handleSelect(i)} style={{padding:"18px 20px",borderRadius:14,border,background:bg,color,fontSize:17,fontWeight:500,textAlign:"left",display:"flex",alignItems:"center",gap:14,boxShadow:selected===null?sh:"none",letterSpacing:"-0.01em",opacity}}>
                 <span style={{width:26,height:26,borderRadius:"50%",border:selected!==null&&(i===q.correct||i===selected)?"none":"1.5px solid "+LINE,background:selected!==null&&i===q.correct?GREEN:selected!==null&&i===selected?RED:"transparent",color:selected!==null&&(i===q.correct||i===selected)?"#fff":GREY,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:600,flexShrink:0}}>{selected!==null&&i===q.correct?<CheckIcon size={14} stroke={3}/>:selected!==null&&i===selected?<XIcon size={14} stroke={3}/>:["A","B","C","D"][i]}</span>
                 {opt}
               </button>);
@@ -2164,10 +2454,10 @@ function App(){
           </div>
 
           {selected!==null&&(
-            <div className="fade" style={{marginTop:24,background:CARD,borderRadius:RADIUS,padding:24,boxShadow:"0 2px 14px rgba(0,0,0,0.05)"}}>
+            <div className="fade" role="status" aria-live="polite" style={{marginTop:26,background:CARD,borderRadius:RADIUS,padding:24,boxShadow:SHADOW_CARD}}>
               <div style={{fontSize:13,fontWeight:600,color:isWrong?RED:GREEN,marginBottom:10,textTransform:"uppercase",letterSpacing:"0.04em"}}>{isWrong?"À retenir":"Correct"}</div>
               <div style={{fontSize:16,lineHeight:1.6,color:INK,marginBottom:isWrong?16:0,letterSpacing:"-0.01em"}}><strong style={{fontWeight:600}}>« {q.options[q.correct]} »</strong> — {q.rule}</div>
-              {isWrong&&q.why&&(<div style={{display:"flex",flexDirection:"column",gap:9,borderTop:"1px solid "+LINE,paddingTop:16}}>{q.options.map((opt,i)=>{ if(i===q.correct||!q.why[i]) return null; return (<div key={i} style={{fontSize:14.5,lineHeight:1.55,color:"#515154"}}><span style={{color:RED,fontWeight:600}}>{opt}</span> — {q.why[i]}</div>); })}</div>)}
+              {isWrong&&q.why&&(<div style={{display:"flex",flexDirection:"column",gap:9,borderTop:"1px solid "+LINE,paddingTop:16}}>{q.options.map((opt,i)=>{ if(i===q.correct||!q.why[i]) return null; return (<div key={i} style={{fontSize:14.5,lineHeight:1.55,color:INK_SOFT}}><span style={{color:RED,fontWeight:600}}>{opt}</span> — {q.why[i]}</div>); })}</div>)}
               {isWrong&&(<div style={{marginTop:16}}>
                 {!deepExpl&&<PillButton kind="secondary" onClick={explainDeeper} disabled={deepLoading} style={{fontSize:14,padding:"10px 18px"}}>{deepLoading?<><Spinner/> Analyse…</>:"Explique-moi plus"}</PillButton>}
                 {deepExpl&&<div className="fade" style={{marginTop:6,background:BG,borderRadius:12,padding:16,fontSize:15,lineHeight:1.6,color:INK,whiteSpace:"pre-wrap"}}>{deepExpl}</div>}
@@ -2176,14 +2466,14 @@ function App(){
           )}
 
           {selected!==null&&(
-            <div style={{marginTop:24,textAlign:"center"}}>
+            <div className="fade" style={{marginTop:26,textAlign:"center"}}>
               {isAI
                 ? <PillButton onClick={()=>{ setAiQuestion(null); setSelected(null); setPhase("home"); }} style={{minWidth:200}}>Terminer</PillButton>
                 : <PillButton onClick={next} style={{minWidth:200}}>{current+1>=total?"Voir le résultat":"Continuer"}</PillButton>}
               {isAI&&<div style={{marginTop:14}}><button className="text-btn" onClick={generateAIQuestion} disabled={aiLoading} style={{background:"none",border:"none",color:BLUE,fontSize:15}}>{aiLoading?<Spinner/>:"Une autre question IA"}</button></div>}
             </div>
           )}
-        </div>
+        </main>
       </div>
     );
   }
@@ -2195,19 +2485,19 @@ function App(){
     const sub=pct>=80?"Tu es sur la bonne voie pour le B2.":pct>=60?"Encore un peu d'entraînement.":"La régularité paie. On y retourne ?";
     return (
       <div style={{minHeight:"100vh",background:BG,display:"flex",alignItems:"center",justifyContent:"center",padding:"max(24px,env(safe-area-inset-top)) 22px"}}>
-        <div className="fade" style={{maxWidth:480,width:"100%",textAlign:"center"}}>
-          <div style={{fontSize:13,color:BLUE,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.05em",marginBottom:16}}>Résultat</div>
-          <div style={{fontSize:80,fontWeight:600,letterSpacing:"-0.04em",lineHeight:1}}>{pct}%</div>
-          <div style={{fontSize:17,color:GREY,margin:"8px 0 28px"}}>{score} bonnes réponses sur {total}</div>
-          <h2 style={{fontSize:32,fontWeight:600,letterSpacing:"-0.03em",margin:"0 0 8px"}}>{title}</h2>
-          <p style={{fontSize:18,color:GREY,margin:"0 0 32px",letterSpacing:"-0.01em"}}>{sub}</p>
+        <main ref={mainRef} tabIndex={-1} className="fade" style={{outline:"none",maxWidth:440,width:"100%",textAlign:"center"}}>
+          <div style={{fontSize:13,color:BLUE,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.05em",marginBottom:22}}>Résultat</div>
+          <ScoreRing pct={pct}/>
+          <div style={{fontSize:16,color:GREY,margin:"18px 0 26px"}}>{score} bonnes réponses sur {total}</div>
+          <h2 style={{fontSize:30,fontWeight:600,letterSpacing:"-0.03em",margin:"0 0 8px"}}>{title}</h2>
+          <p style={{fontSize:17,color:GREY,margin:"0 0 30px",letterSpacing:"-0.01em"}}>{sub}</p>
           <div style={{display:"flex",flexDirection:"column",gap:12,alignItems:"center"}}>
             <PillButton onClick={()=>start("all")} style={{minWidth:240}}>Recommencer</PillButton>
             {wrong.length>0&&<PillButton kind="secondary" onClick={()=>setPhase("review")} style={{minWidth:240}}>Revoir mes {wrong.length} erreur{wrong.length>1?"s":""}</PillButton>}
             <button className="text-btn" onClick={()=>setShowTutor(true)} style={{background:"none",border:"none",color:BLUE,fontSize:16,marginTop:4,display:"flex",alignItems:"center",gap:6}}><MessageIcon size={16}/>Réviser avec le tuteur</button>
             <button className="text-btn" onClick={()=>setPhase("home")} style={{background:"none",border:"none",color:GREY,fontSize:15}}>Accueil</button>
           </div>
-        </div>
+        </main>
       </div>
     );
   }
@@ -2216,19 +2506,19 @@ function App(){
   if(phase==="review"){
     return (
       <div style={{minHeight:"100vh",background:BG,padding:"max(24px,env(safe-area-inset-top)) 22px 60px"}}>
-        <div style={{maxWidth:600,margin:"0 auto"}}>
+        <main ref={mainRef} tabIndex={-1} style={{outline:"none",maxWidth:600,margin:"0 auto"}}>
           <button className="text-btn" onClick={()=>setPhase("result")} style={{background:"none",border:"none",color:BLUE,fontSize:16,marginBottom:20,padding:0,display:"flex",alignItems:"center",gap:2}}><ChevronLeft size={18}/>Retour</button>
-          <h1 style={{fontSize:34,fontWeight:600,letterSpacing:"-0.03em",margin:"0 0 24px"}}>Mes erreurs</h1>
-          {wrong.map((w,idx)=>(<div key={idx} className="fade" style={{background:CARD,borderRadius:RADIUS,padding:24,marginBottom:16,boxShadow:"0 2px 14px rgba(0,0,0,0.05)"}}>
+          <h1 style={{fontSize:32,fontWeight:600,letterSpacing:"-0.03em",margin:"0 0 26px"}}>Mes erreurs</h1>
+          {wrong.map((w,idx)=>(<div key={idx} className="fade" style={{background:CARD,border:"1px solid "+LINE,borderRadius:RADIUS,padding:24,marginBottom:16,boxShadow:SHADOW_CARD}}>
             <div style={{fontSize:17,lineHeight:1.5,marginBottom:14,color:INK,fontWeight:500,letterSpacing:"-0.01em"}}>{w.type==="reading"?w.question:w.sentence.replace("___","« "+w.options[w.correct]+" »")}</div>
             <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:14}}>
-              <span style={{fontSize:13,background:"#ffeceb",color:"#c4271f",borderRadius:8,padding:"5px 12px",fontWeight:500}}>Ta réponse : {w.options[w.chosen]}</span>
-              <span style={{fontSize:13,background:"#eafaef",color:"#0a7d33",borderRadius:8,padding:"5px 12px",fontWeight:500}}>Correct : {w.options[w.correct]}</span>
+              <span style={{fontSize:13,background:RED_BG,color:RED_TEXT,borderRadius:8,padding:"5px 12px",fontWeight:500}}>Ta réponse : {w.options[w.chosen]}</span>
+              <span style={{fontSize:13,background:GREEN_BG,color:GREEN_TEXT,borderRadius:8,padding:"5px 12px",fontWeight:500}}>Correct : {w.options[w.correct]}</span>
             </div>
-            <div style={{fontSize:15,lineHeight:1.6,color:"#515154",background:BG,borderRadius:12,padding:16}}>{w.rule}</div>
+            <div style={{fontSize:15,lineHeight:1.6,color:INK_SOFT,background:BG,borderRadius:12,padding:16}}>{w.rule}</div>
           </div>))}
           <div style={{textAlign:"center",marginTop:24}}><PillButton onClick={()=>start("all")} style={{minWidth:220}}>Recommencer</PillButton></div>
-        </div>
+        </main>
       </div>
     );
   }
