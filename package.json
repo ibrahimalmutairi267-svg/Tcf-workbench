@@ -4,9 +4,13 @@
   "version": "1.0.0",
   "description": "TCF B2 practice website",
   "scripts": {
-    "build": "esbuild src/app.jsx --bundle --outfile=dist/app.js"
+    "build": "esbuild src/app.jsx --bundle --outfile=dist/app.js",
+    "test:data": "node tests/data-integrity.test.js && node tests/build-integrity.test.js",
+    "test:e2e": "playwright test",
+    "test": "npm run build && npm run test:data && npm run test:e2e"
   },
   "devDependencies": {
+    "@playwright/test": "1.56.1",
     "esbuild": "0.28.1"
   }
 }

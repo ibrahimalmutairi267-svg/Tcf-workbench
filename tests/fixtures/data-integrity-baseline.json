@@ -1,0 +1,10 @@
+{
+  "description": "Checksum baseline protecting the TCF question/reading data from unintended changes. Regenerate only after an intentional, human-approved content change.",
+  "generatedFromCommit": "c38f44361f7bc9ffacb39a618364da6de86b4185",
+  "questionsCount": 170,
+  "readingCount": 1152,
+  "totalCount": 1322,
+  "questionsChecksum": "sha256:0c1204fc5cc747175832826b4c5a6e5ace437c7cebe41cd91810bcb52fb781f3",
+  "readingChecksum": "sha256:81831b2f3a2227fec9fe05341f80a4b594a680f8fede0e8e3b439f9fb661754f",
+  "allChecksum": "sha256:3daaa9213002eb94a03ee8a6bb8dbe4bc5604407ce3949deb228c49dc2961d84"
+}
