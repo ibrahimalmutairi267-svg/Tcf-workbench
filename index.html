@@ -1468,7 +1468,10 @@ const DEFAULT_WORKER = "https://tcf.b-r-h-oomy-ih.workers.dev";
 const AI_BANK_KEY = "tcf_ai_bank_v1";
 const AI_BANK_MAX = 300; // cap so localStorage doesn't grow without bound
 const PLAN_KEY = "tcf_plan_v1";
-const PLAN_DAYS = 14;
+const PLAN_DAYS = 14;                       // legacy default (kept for migration)
+const PLAN_DEFAULT_DURATION = 14;
+const PLAN_DURATIONS = [7,10,14,21,30];     // preset target lengths, plus "custom"
+const PLAN_MIN_DAYS = 1, PLAN_MAX_DAYS = 120;
 
 function saveProgress(d){ try{ localStorage.setItem(STORE_KEY,JSON.stringify(d)); }catch(e){} }
 function loadProgress(){ try{ const r=localStorage.getItem(STORE_KEY); return r?JSON.parse(r):null; }catch(e){ return null; } }
@@ -1497,6 +1500,92 @@ function daysSince(k){ return Math.floor((keyToDate(todayKey())-keyToDate(k))/86
 
 const emptyStats = { lifetimeCorrect:0, lifetimeAnswered:0, sessions:0, masteredIds:[], strugglingIds:[], bestPct:0 };
 function shuffle(a){ a=[...a]; for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+
+// ===== Study-plan engine (pure) =====
+// The planner never creates questions — it only spreads the EXISTING bank over
+// the number of days the user picked, redistributing whatever is still
+// unanswered whenever the situation changes (a missed day, a changed target).
+// All functions here are pure so the behaviour is testable and predictable.
+const FR_MONTHS = ["janv.","févr.","mars","avr.","mai","juin","juil.","août","sept.","oct.","nov.","déc."];
+function addDaysKey(key,n){ const d=keyToDate(key); d.setDate(d.getDate()+n); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
+function formatDateFr(key){ const d=keyToDate(key); return d.getDate()+" "+FR_MONTHS[d.getMonth()]; }
+// Split n items over `days`, as evenly as possible, remainder on the first days.
+function evenSplit(n,days){ days=Math.max(1,days|0); n=Math.max(0,n|0); const base=Math.floor(n/days), r=n%days; const out=[]; for(let i=0;i<days;i++) out.push(base+(i<r?1:0)); return out; }
+function clampInt(n,lo,hi){ n=Math.round(n)||0; return Math.max(lo,Math.min(hi,n)); }
+// Whole days elapsed since the plan anchor, discounting any paused stretch.
+function planElapsed(p){ const cur=p.pauseStart!=null?daysSince(p.pauseStart):0; return Math.max(0, daysSince(p.start)-(p.pauseAccum||0)-cur); }
+// Bring a stored plan up to the current shape and the CURRENT question bank:
+// completed ids that no longer exist are dropped, and `order` is rebuilt to
+// contain exactly today's ids (prior order kept for stability). Completed
+// progress is preserved. Safe on a legacy {start,order,completed} plan too.
+function normalizePlan(plan, allIds){
+  if(!plan) return null;
+  const idset=new Set(allIds);
+  const prevOrder=Array.isArray(plan.order)?plan.order.filter(id=>idset.has(id)):[];
+  const completed=(Array.isArray(plan.completed)?plan.completed:[]).filter(id=>idset.has(id));
+  const completedSet=new Set(completed);
+  const seen=new Set(); const order=[];
+  for(const id of prevOrder){ if(!seen.has(id)){ seen.add(id); order.push(id); } }
+  for(const id of allIds){ if(!seen.has(id)){ seen.add(id); order.push(id); } }
+  const revision=(Array.isArray(plan.revision)?plan.revision:[]).filter(id=>completedSet.has(id));
+  return { v:2, start: plan.start||todayKey(), duration: clampInt(plan.duration||PLAN_DEFAULT_DURATION,PLAN_MIN_DAYS,PLAN_MAX_DAYS),
+    order, completed, revision, pauseAccum: plan.pauseAccum||0, pauseStart: plan.pauseStart||null, today: plan.today||null };
+}
+// Recompute today's fixed allocation once per calendar day (or after a change
+// that reset it). Returns the plan unchanged if today is already snapshotted.
+function refreshPlanToday(plan){
+  if(!plan||plan.pauseStart) return plan;
+  const key=todayKey();
+  if(plan.today && plan.today.key===key) return plan;
+  const completedSet=new Set(plan.completed);
+  const unanswered=plan.order.filter(id=>!completedSet.has(id));
+  const daysRemaining=Math.max(1, plan.duration - planElapsed(plan));
+  const assigned=Math.min(unanswered.length, Math.ceil(unanswered.length/daysRemaining));
+  return { ...plan, today:{ key, assigned, doneAtStart: plan.completed.length } };
+}
+// Derive everything the UI needs. Pure — no side effects.
+function planView(plan){
+  const total=plan.order.length;
+  const completedSet=new Set(plan.completed);
+  const unansweredIds=plan.order.filter(id=>!completedSet.has(id));
+  const completedCount=total-unansweredIds.length;
+  const paused=plan.pauseStart!=null;
+  const dayIndex=planElapsed(plan);
+  const duration=plan.duration;
+  const dayNum=Math.min(duration, dayIndex+1);
+  const overdueDays=Math.max(0, (dayIndex+1)-duration);
+  const daysRemaining=Math.max(1, duration-dayIndex);
+  const t=(plan.today && plan.today.key===todayKey())?plan.today:null;
+  const assigned=t?t.assigned:Math.min(unansweredIds.length, Math.ceil(unansweredIds.length/daysRemaining));
+  const doneAtStart=t?t.doneAtStart:completedCount;
+  const doneToday=Math.max(0, completedCount-doneAtStart);
+  const remToday=Math.max(0, Math.min(assigned-doneToday, unansweredIds.length));
+  const todayQueue=unansweredIds.slice(0, remToday);
+  const finished=unansweredIds.length===0;
+  const dayComplete=!finished && remToday===0;
+  const nextDaysRemaining=Math.max(1, duration-(dayIndex+1));
+  const nextAssigned=Math.min(unansweredIds.length, Math.ceil(unansweredIds.length/nextDaysRemaining));
+  const nextQueue=unansweredIds.slice(0, nextAssigned);
+  const pct=total?Math.round(completedCount/total*100):0;
+  const avgPerDay=Math.ceil(unansweredIds.length/daysRemaining);
+  const totalPause=(plan.pauseAccum||0)+(paused?daysSince(plan.pauseStart):0);
+  const endKey=addDaysKey(plan.start, duration+totalPause);
+  // Reference schedule (stable) for the day-by-day grid.
+  const quotas=evenSplit(total, duration);
+  let cum=0; const cumTarget=quotas.map(q=>(cum+=q));
+  let progressDay=duration+1;
+  for(let d=0; d<duration; d++){ if(completedCount<cumTarget[d]){ progressDay=d+1; break; } }
+  const days=quotas.map((q,i)=>{
+    const dnum=i+1;
+    const done=completedCount>=cumTarget[i];
+    const status=done?"done":(dnum===progressDay?"current":"upcoming");
+    return { dayNum:dnum, quota:q, status };
+  });
+  return { total, completedCount, remaining:unansweredIds.length, revisionIds:plan.revision||[],
+    paused, dayIndex, dayNum, duration, overdueDays, daysRemaining,
+    assigned, doneToday, remToday, todayQueue, finished, dayComplete,
+    nextAssigned, nextQueue, pct, avgPerDay, endKey, days, unansweredIds };
+}
 
 // Topic pool for AI-generated grammar questions, to force variety instead of
 // letting the model default to its single most likely pattern (in practice,
@@ -1992,13 +2081,15 @@ function App(){
   const [showSettings,setShowSettings]=useState(false);
   const [aiBank,setAiBank]=useState([]);
   const [plan,setPlan]=useState(null);
+  const [customDaysOpen,setCustomDaysOpen]=useState(false);
+  const [customDays,setCustomDays]=useState("");
   const [themeMode,setThemeMode]=useState(loadThemePref);
   const [reduceMotion,setReduceMotion]=useState(loadReduceMotion);
   const hasWorker=true; // built-in worker ships with the app
   const mainRef=useRef(null);
   const screenKey=showSettings?"settings":showTutor?"tutor":phase;
 
-  useEffect(()=>{ const s=loadProgress(); if(s){ setStats(s.stats||emptyStats); if(s.session&&s.session.order&&s.session.current<s.session.order.length) setHasSession(true); } setAiBank(loadAiBank()); setPlan(loadPlan()); },[]);
+  useEffect(()=>{ const s=loadProgress(); if(s){ setStats(s.stats||emptyStats); if(s.session&&s.session.order&&s.session.current<s.session.order.length) setHasSession(true); } setAiBank(loadAiBank()); const rawPlan=loadPlan(); if(rawPlan){ const np=refreshPlanToday(normalizePlan(rawPlan, ALL.map(x=>x.id))); setPlan(np); savePlan(np); } },[]);
 
   useEffect(()=>{
     saveReduceMotion(reduceMotion);
@@ -2034,33 +2125,65 @@ function App(){
     return ()=>{ mq.removeEventListener?mq.removeEventListener("change",onChange):mq.removeListener(onChange); };
   },[themeMode]);
 
-  // ===== 14-day plan =====
-  // The plan fixes a question order up front, then each day unlocks another
-  // slice. Target is *cumulative* (everything up to and including today), so
-  // if you miss a day the leftovers simply roll forward as a backlog instead
-  // of vanishing.
-  const planPerDay = Math.ceil(ALL.length/PLAN_DAYS);
-  const planDayIndex = plan?Math.min(daysSince(plan.start),PLAN_DAYS-1):0;
-  const planDayNum = planDayIndex+1;
-  const planDoneSet = useMemo(()=>new Set(plan?plan.completed:[]),[plan]);
-  const planDone = plan?plan.completed.length:0;
-  const planTargetToday = plan?Math.min(ALL.length,(planDayIndex+1)*planPerDay):0;
-  const planDueIds = plan?plan.order.slice(0,planTargetToday).filter(id=>!planDoneSet.has(id)):[];
-  const planFinished = plan&&planDone>=ALL.length;
-  const planOverdue = plan?Math.max(0,daysSince(plan.start)-(PLAN_DAYS-1)):0;
+  // ===== Study plan =====
+  // The plan spreads the EXISTING bank over a user-chosen number of days and
+  // redistributes what's left whenever a day is missed or the target changes.
+  // planView() (pure) derives every number the UI shows.
+  const pv = useMemo(()=> plan ? planView(plan) : null, [plan]);
 
-  const startPlan=()=>{ const p={start:todayKey(),order:shuffle(ALL.map(x=>x.id)),completed:[]}; setPlan(p); savePlan(p); };
-  const resetPlan=()=>{ setPlan(null); savePlan(null); };
-  const startPlanSession=()=>{
-    if(!plan||planDueIds.length===0) return;
-    const pool=planDueIds.map(id=>ALL[id]).filter(Boolean);
-    setMode("plan"); setQuestions(pool); setCurrent(0); setSelected(null); setScore(0); setWrong([]); resetDeepExpl(); setAiQuestion(null); setPhase("quiz"); setHasSession(true);
-    saveProgress({stats,session:{order:pool.map(x=>x.id),current:0,score:0,wrong:[],mode:"plan"}});
+  // Snapshot today's allocation once per calendar day so the day's target is
+  // stable even as questions get answered. Guarded on the date key → no loop.
+  useEffect(()=>{
+    if(!plan || plan.pauseStart) return;
+    if(plan.today && plan.today.key===todayKey()) return;
+    const np=refreshPlanToday(plan);
+    if(np!==plan){ setPlan(np); savePlan(np); }
+  },[plan]);
+
+  const persistPlan=(p)=>{ setPlan(p); savePlan(p); };
+  const startPlan=(duration=PLAN_DEFAULT_DURATION)=>{
+    const p={ v:2, start: todayKey(), duration: clampInt(duration,PLAN_MIN_DAYS,PLAN_MAX_DAYS),
+      order: shuffle(ALL.map(x=>x.id)), completed:[], revision:[], pauseAccum:0, pauseStart:null, today:null };
+    persistPlan(refreshPlanToday(p));
   };
-  const markPlanDone=(id)=>{
-    if(!plan||typeof id!=="number"||planDoneSet.has(id)) return;
-    const p={...plan,completed:[...plan.completed,id]};
-    setPlan(p); savePlan(p);
+  // Only remaining unanswered questions are re-spread; completed never change.
+  const changePlanDuration=(duration)=>{
+    if(!plan) return;
+    persistPlan(refreshPlanToday({ ...plan, duration: clampInt(duration,PLAN_MIN_DAYS,PLAN_MAX_DAYS), today:null }));
+  };
+  const pausePlan=()=>{ if(!plan||plan.pauseStart) return; persistPlan({ ...plan, pauseStart: todayKey() }); };
+  const resumePlan=()=>{ if(!plan||!plan.pauseStart) return; const add=daysSince(plan.pauseStart); persistPlan(refreshPlanToday({ ...plan, pauseStart:null, pauseAccum:(plan.pauseAccum||0)+add, today:null })); };
+  // Re-anchor the schedule to today, keeping all completed progress & revision.
+  const restartPlan=()=>{ if(!plan) return; persistPlan(refreshPlanToday({ ...plan, start: todayKey(), pauseAccum:0, pauseStart:null, today:null })); };
+  const abandonPlan=()=>{ setPlan(null); savePlan(null); };
+
+  const startPool=(pool,m)=>{
+    if(!pool.length) return;
+    setMode(m); setQuestions(pool); setCurrent(0); setSelected(null); setScore(0); setWrong([]); resetDeepExpl(); setAiQuestion(null); setPhase("quiz"); setHasSession(true);
+    saveProgress({stats,session:{order:pool.map(x=>x.id),current:0,score:0,wrong:[],mode:m}});
+  };
+  const startPlanSession=()=>{ if(pv) startPool(pv.todayQueue.map(id=>ALL[id]).filter(Boolean),"plan"); };
+  const startContinueAhead=()=>{ if(pv) startPool(pv.nextQueue.map(id=>ALL[id]).filter(Boolean),"plan"); };
+  const startRevisionSession=()=>{ if(pv) startPool(shuffle(pv.revisionIds).map(id=>ALL[id]).filter(Boolean),"revision"); };
+
+  // Record an answer against the plan: it counts as done (whether right or
+  // wrong — a mistake never adds to the workload) and wrong answers join the
+  // optional revision queue until answered correctly. No-op without a plan.
+  const recordPlanAnswer=(id,correct)=>{
+    if(typeof id!=="number") return;
+    setPlan(prev=>{
+      if(!prev) return prev;
+      const completedSet=new Set(prev.completed);
+      let completed=prev.completed;
+      if(!completedSet.has(id)) completed=[...prev.completed, id];
+      let revision=prev.revision||[];
+      const inRev=revision.includes(id);
+      if(correct){ if(inRev) revision=revision.filter(x=>x!==id); }
+      else { if(!inRev) revision=[...revision, id]; }
+      if(completed===prev.completed && revision===(prev.revision||[])) return prev;
+      const np={ ...prev, completed, revision };
+      savePlan(np); return np;
+    });
   };
   const persist=(ns,session)=>saveProgress({stats:ns,session:session||null});
   const findById=(id)=>{ const fromAll=(typeof id==="number")?ALL[id]:undefined; return fromAll!==undefined?fromAll:aiBank.find(a=>a.id===id); };
@@ -2093,7 +2216,7 @@ function App(){
     setSelected(i); resetDeepExpl();
     if(aiQuestion) return;
     const correct=i===q.correct;
-    markPlanDone(q.id);
+    recordPlanAnswer(q.id,correct);
     const newScore=correct?score+1:score;
     const newWrong=correct?wrong:[...wrong,{...q,chosen:i}];
     if(correct) setScore(newScore); else setWrong(newWrong);
@@ -2372,10 +2495,10 @@ function App(){
           <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:28}}>
             {plan&&<div style={{background:CARD,border:"1px solid "+LINE,borderRadius:RADIUS,padding:20,display:"flex",justifyContent:"space-between",alignItems:"center",gap:12}}>
               <div>
-                <div style={{fontSize:15,fontWeight:600,color:INK}}>Plan 14 jours</div>
-                <div style={{fontSize:13,color:GREY,marginTop:2}}>{planDone} / {ALL.length} questions faites</div>
+                <div style={{fontSize:15,fontWeight:600,color:INK}}>Plan d'étude</div>
+                <div style={{fontSize:13,color:GREY,marginTop:2}}>{pv?pv.completedCount:0} / {ALL.length} questions faites</div>
               </div>
-              <button className="text-btn" onClick={()=>{ if(confirm("Abandonner le plan en cours ?")) resetPlan(); }} style={{background:"none",border:"none",color:RED,fontSize:14,whiteSpace:"nowrap"}}>Abandonner</button>
+              <button className="text-btn" onClick={()=>{ if(confirm("Abandonner le plan en cours ? Ta progression sera perdue.")){ abandonPlan(); } }} style={{background:"none",border:"none",color:RED,fontSize:14,whiteSpace:"nowrap"}}>Abandonner</button>
             </div>}
             {aiBank.length>0&&<div style={{background:CARD,border:"1px solid "+LINE,borderRadius:RADIUS,padding:20,display:"flex",justifyContent:"space-between",alignItems:"center",gap:12}}>
               <div>
@@ -2447,18 +2570,155 @@ function App(){
   if(showTutor) return <TutorChat onClose={()=>setShowTutor(false)} />;
 
   // ===== Home =====
+  // ===== Study-plan screen (central navigation) =====
+  if(phase==="plan"){
+    const chipStyle=(active)=>({padding:"10px 0",flex:"1 1 0",minWidth:54,textAlign:"center",borderRadius:12,border:"1px solid "+(active?BLUE:LINE),background:active?BLUE:CARD,color:active?"#fff":INK,fontSize:15,fontWeight:600});
+    const statTile=(label,value,accent)=>(
+      <div style={{flex:"1 1 0",minWidth:0,textAlign:"center"}}>
+        <div style={{fontSize:26,fontWeight:700,letterSpacing:"-0.03em",color:accent||INK}}>{value}</div>
+        <div style={{fontSize:12,color:GREY,marginTop:2}}>{label}</div>
+      </div>
+    );
+    const DurationPicker=(
+      <div>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+          {PLAN_DURATIONS.map(d=>(
+            <button key={d} className="opt-row" onClick={()=>{ setCustomDaysOpen(false); plan?changePlanDuration(d):startPlan(d); }} style={chipStyle(plan&&pv?(!customDaysOpen&&pv.duration===d):false)}>{d} j</button>
+          ))}
+          <button className="opt-row" onClick={()=>setCustomDaysOpen(o=>!o)} style={chipStyle(customDaysOpen)}>Perso</button>
+        </div>
+        {customDaysOpen&&(
+          <div style={{display:"flex",gap:8,marginTop:10}}>
+            <input type="number" inputMode="numeric" min={PLAN_MIN_DAYS} max={PLAN_MAX_DAYS} value={customDays} onChange={e=>setCustomDays(e.target.value)} placeholder={"Jours ("+PLAN_MIN_DAYS+"–"+PLAN_MAX_DAYS+")"} aria-label="Nombre de jours" style={{flex:1,padding:"11px 14px",borderRadius:12,border:"1px solid "+LINE,background:CARD,color:INK,fontSize:15}}/>
+            <PillButton onClick={()=>{ if(!String(customDays).trim()) return; const d=clampInt(parseInt(customDays,10)||0,PLAN_MIN_DAYS,PLAN_MAX_DAYS); plan?changePlanDuration(d):startPlan(d); setCustomDaysOpen(false); setCustomDays(""); }} style={{minWidth:104}}>Valider</PillButton>
+          </div>
+        )}
+      </div>
+    );
+    const statusPill=!pv?null:(pv.paused?{t:"En pause",bg:TRACK_BG,c:GREY}:pv.finished?{t:"Terminé",bg:GREEN_BG,c:GREEN_TEXT}:pv.dayComplete?{t:"Jour fait",bg:GREEN_BG,c:GREEN_TEXT}:pv.overdueDays>0?{t:"Rattrapage",bg:AMBER_BG,c:AMBER_TEXT}:{t:"En cours",bg:QUOTE_BG,c:BLUE});
+    return (
+      <div style={{minHeight:"100vh",background:BG}}>
+        <header style={{position:"sticky",top:0,zIndex:10,background:OVERLAY,backdropFilter:"blur(20px)",borderBottom:"1px solid "+LINE,padding:"calc(env(safe-area-inset-top) + 12px) 22px 12px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <button className="text-btn" onClick={()=>setPhase("home")} style={{background:"none",border:"none",color:BLUE,fontSize:16,padding:0,display:"flex",alignItems:"center",gap:2}}><ChevronLeft size={19}/>Accueil</button>
+          <span style={{fontSize:15,color:INK,fontWeight:600}}>Plan d'étude</span>
+          <div style={{width:64}}/>
+        </header>
+        <main ref={mainRef} tabIndex={-1} style={{outline:"none",maxWidth:600,margin:"0 auto",padding:"24px 22px 72px"}}>
+          {(!plan||!pv) ? (
+            <div className="fade">
+              <h1 style={{fontSize:30,fontWeight:600,letterSpacing:"-0.03em",margin:"8px 0 12px"}}>Ton plan d'étude</h1>
+              <p style={{fontSize:16,color:GREY,lineHeight:1.5,margin:"0 0 22px"}}>En combien de jours veux-tu terminer les {ALL.length} questions ? On répartit tout automatiquement, jour par jour.</p>
+              {DurationPicker}
+              <p style={{fontSize:13,color:GREY,marginTop:14,lineHeight:1.5}}>Choisis une durée pour démarrer. Tu pourras la changer quand tu veux — ta progression est toujours conservée.</p>
+            </div>
+          ) : pv.finished ? (
+            <div className="fade" style={{textAlign:"center",padding:"20px 0"}}>
+              <CheckIcon size={34} stroke={2.5} style={{color:GREEN,margin:"0 auto 14px"}}/>
+              <h1 style={{fontSize:28,fontWeight:600,letterSpacing:"-0.03em",margin:"0 0 8px"}}>Plan terminé</h1>
+              <p style={{fontSize:16,color:GREY,lineHeight:1.5,margin:"0 0 24px"}}>Tu as répondu aux {pv.total} questions. Bravo.</p>
+              {pv.revisionIds.length>0&&<PillButton onClick={startRevisionSession} style={{minWidth:240,marginBottom:12}}>Réviser mes {pv.revisionIds.length} erreur{pv.revisionIds.length>1?"s":""}</PillButton>}
+              <div><button className="text-btn" onClick={()=>{ if(confirm("Recommencer le plan depuis zéro ? Ta progression sera remise à zéro.")){ startPlan(pv.duration); } }} style={{background:"none",border:"none",color:BLUE,fontSize:15,marginTop:4}}>Recommencer un plan</button></div>
+            </div>
+          ) : (
+            <div className="fade">
+              {/* Daily card */}
+              <div style={{background:CARD,border:"1px solid "+LINE,borderRadius:22,padding:"22px 22px 24px",boxShadow:SHADOW_CARD}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18}}>
+                  <div><span style={{fontSize:24,fontWeight:700,letterSpacing:"-0.03em"}}>Jour {pv.dayNum}</span><span style={{fontSize:15,color:GREY,marginLeft:6}}>sur {pv.duration}</span></div>
+                  {statusPill&&<span style={{fontSize:12,fontWeight:700,letterSpacing:"0.03em",color:statusPill.c,background:statusPill.bg,padding:"5px 10px",borderRadius:8}}>{statusPill.t}</span>}
+                </div>
+                <div style={{display:"flex",gap:8,marginBottom:18}}>
+                  {statTile("Assignées",pv.assigned)}
+                  {statTile("Faites",pv.doneToday,GREEN_TEXT)}
+                  {statTile("Restantes",pv.remToday,pv.remToday>0?BLUE:GREY)}
+                </div>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:7}}>
+                  <span style={{fontSize:13,color:GREY}}>Aujourd'hui</span>
+                  <span style={{fontSize:13,color:GREY}}>{pv.completedCount} / {pv.total} · {pv.pct}%</span>
+                </div>
+                <div style={{height:8,background:TRACK_BG,borderRadius:4,overflow:"hidden"}}><div style={{height:"100%",width:`${pv.assigned>0?Math.min(100,Math.round(pv.doneToday/pv.assigned*100)):100}%`,background:pv.dayComplete?GREEN:BLUE,borderRadius:4,transition:"width .5s"}}/></div>
+                {pv.paused ? (
+                  <PillButton onClick={resumePlan} style={{width:"100%",marginTop:20}}>Reprendre le plan</PillButton>
+                ) : pv.remToday>0 ? (
+                  <PillButton onClick={startPlanSession} style={{width:"100%",marginTop:20}}>Commencer la séance · {pv.remToday}</PillButton>
+                ) : (
+                  <>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,background:GREEN_BG,color:GREEN_TEXT,padding:"12px 16px",borderRadius:12,fontSize:14,fontWeight:600,marginTop:20}}>
+                      <CheckIcon size={16} stroke={2.5}/>Objectif du jour atteint
+                    </div>
+                    {pv.remaining>0&&<PillButton kind="secondary" onClick={startContinueAhead} style={{width:"100%",marginTop:12}}>Continuer en avance · {pv.nextAssigned}</PillButton>}
+                  </>
+                )}
+              </div>
+
+              {/* Revision queue */}
+              {pv.revisionIds.length>0&&(
+                <div style={{background:CARD,border:"1px solid "+LINE,borderRadius:18,padding:"16px 18px",boxShadow:SHADOW_XS,marginTop:14,display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
+                  <div>
+                    <div style={{fontSize:15,fontWeight:600,color:INK}}>File de révision</div>
+                    <div style={{fontSize:13,color:GREY,marginTop:2}}>{pv.revisionIds.length} erreur{pv.revisionIds.length>1?"s":""} à revoir — optionnel</div>
+                  </div>
+                  <button className="text-btn" onClick={startRevisionSession} style={{background:QUOTE_BG,border:"none",color:BLUE,fontSize:14,fontWeight:600,padding:"9px 16px",borderRadius:11,whiteSpace:"nowrap"}}>Réviser</button>
+                </div>
+              )}
+
+              {/* Overview */}
+              <SectionLabel icon={TargetIcon}>Vue d'ensemble</SectionLabel>
+              <div style={{background:CARD,border:"1px solid "+LINE,borderRadius:18,padding:"6px 18px",boxShadow:SHADOW_XS,marginBottom:26}}>
+                {[["Total",pv.total],["Terminées",pv.completedCount],["Restantes",pv.remaining],["Jour actuel",pv.dayNum+" / "+pv.duration],["Jours restants",pv.daysRemaining],["Moyenne / jour","~"+pv.avgPerDay],["Fin estimée",formatDateFr(pv.endKey)]].map((row,i,arr)=>(
+                  <div key={row[0]} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 0",borderBottom:i<arr.length-1?"1px solid "+LINE:"none"}}>
+                    <span style={{fontSize:14.5,color:GREY}}>{row[0]}</span>
+                    <span style={{fontSize:14.5,fontWeight:600,color:INK}}>{row[1]}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Day-by-day progress */}
+              <SectionLabel icon={CheckIcon}>Progression</SectionLabel>
+              <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:26}}>
+                {pv.days.map(d=>{
+                  const st=d.status;
+                  const bg=st==="done"?GREEN_BG:st==="current"?BLUE:CARD;
+                  const col=st==="done"?GREEN_TEXT:st==="current"?"#fff":GREY;
+                  const bd=st==="current"?BLUE:LINE;
+                  return (
+                    <div key={d.dayNum} title={"Jour "+d.dayNum+" · ~"+d.quota+" questions"} style={{width:38,height:38,borderRadius:10,background:bg,border:"1px solid "+bd,color:col,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:600}}>
+                      {st==="done"?<CheckIcon size={15} stroke={3}/>:d.dayNum}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Plan settings */}
+              <SectionLabel icon={GearIcon}>Réglages du plan</SectionLabel>
+              <div style={{marginBottom:10}}>
+                <div style={{fontSize:13,color:GREY,marginBottom:8}}>Durée — seules les questions non répondues sont redistribuées.</div>
+                {DurationPicker}
+              </div>
+              <div style={{display:"flex",gap:10,flexWrap:"wrap",marginTop:14}}>
+                <button className="text-btn" onClick={pv.paused?resumePlan:pausePlan} style={{flex:"1 1 40%",minWidth:130,background:CARD,border:"1px solid "+LINE,borderRadius:12,padding:"12px 14px",color:INK,fontSize:14,fontWeight:500}}>{pv.paused?"Reprendre":"Mettre en pause"}</button>
+                <button className="text-btn" onClick={()=>{ if(confirm("Redémarrer le calendrier à aujourd'hui ? Ta progression est conservée.")) restartPlan(); }} style={{flex:"1 1 40%",minWidth:130,background:CARD,border:"1px solid "+LINE,borderRadius:12,padding:"12px 14px",color:INK,fontSize:14,fontWeight:500}}>Redémarrer</button>
+                <button className="text-btn" onClick={()=>{ if(confirm("Abandonner le plan ? Ta progression sera perdue.")){ abandonPlan(); setPhase("home"); } }} style={{flex:"1 1 100%",background:"none",border:"none",color:RED,fontSize:14,fontWeight:500,padding:"6px"}}>Abandonner le plan</button>
+              </div>
+            </div>
+          )}
+        </main>
+      </div>
+    );
+  }
+
   if(phase==="home"){
     const mastered=stats.masteredIds.length, struggling=stats.strugglingIds.length;
     const pct=stats.lifetimeAnswered>0?Math.round((stats.lifetimeCorrect/stats.lifetimeAnswered)*100):0;
 
     // One obvious primary action, chosen by what's most relevant right now:
     // an in-progress session beats today's plan slice beats a cold start.
-    const planCta = plan&&!planFinished&&planDueIds.length>0
-      ? { label: planOverdue>0?`Rattraper ${planDueIds.length} question${planDueIds.length>1?"s":""}`:`Faire les ${planDueIds.length} question${planDueIds.length>1?"s":""} du jour`, fn:startPlanSession }
+    const planCta = plan&&pv&&!pv.finished&&pv.remToday>0
+      ? { label: pv.overdueDays>0?`Rattraper ${pv.remToday} question${pv.remToday>1?"s":""}`:`Faire mes ${pv.remToday} question${pv.remToday>1?"s":""} du jour`, fn:startPlanSession }
       : null;
     const heroCta = hasSession
       ? { label:"Reprendre", fn:resumeSession }
-      : (planCta || { label:"Commencer", fn:()=>start("all","all") });
+      : (planCta || (plan&&pv&&!pv.finished ? { label:"Ouvrir le plan", fn:()=>setPhase("plan") } : { label:"Commencer", fn:()=>start("all","all") }));
     const planCtaShownInHero = heroCta.fn===startPlanSession;
 
     return (
@@ -2483,39 +2743,44 @@ function App(){
 
           <div className="home-grid">
             <div>
-              {/* Plan 14 jours */}
-              <SectionLabel icon={TargetIcon}>Plan 14 jours</SectionLabel>
+              {/* Plan d'étude */}
+              <SectionLabel icon={TargetIcon}>Plan d'étude</SectionLabel>
               <div className="fade" style={{background:CARD,border:"1px solid "+LINE,borderRadius:20,padding:"22px 24px",boxShadow:SHADOW_CARD,marginBottom:26}}>
-                {!plan ? (
+                {!plan||!pv ? (
                   <>
-                    <p style={{fontSize:15,color:GREY,margin:"0 0 16px",lineHeight:1.45}}>Termine les {ALL.length} questions en deux semaines — environ {planPerDay} par jour. Si tu sautes un jour, le retard est reporté automatiquement.</p>
-                    <PillButton onClick={startPlan} style={{width:"100%"}}>Commencer le plan</PillButton>
+                    <p style={{fontSize:15,color:GREY,margin:"0 0 16px",lineHeight:1.45}}>Choisis en combien de jours finir les {ALL.length} questions. On répartit tout pour toi, jour par jour.</p>
+                    <PillButton onClick={()=>setPhase("plan")} style={{width:"100%"}}>Créer mon plan</PillButton>
                   </>
-                ) : planFinished ? (
+                ) : pv.finished ? (
                   <div style={{textAlign:"center"}}>
                     <CheckIcon size={26} stroke={2.5} style={{color:GREEN,margin:"0 auto 10px"}}/>
                     <div style={{fontSize:17,fontWeight:600,letterSpacing:"-0.02em",marginBottom:4}}>Plan terminé</div>
                     <p style={{fontSize:14,color:GREY,margin:"0 0 16px",lineHeight:1.45}}>Tu as vu les {ALL.length} questions. Bravo.</p>
-                    <PillButton kind="secondary" onClick={()=>{ if(confirm("Recommencer un nouveau plan de 14 jours ?")) startPlan(); }}>Nouveau plan</PillButton>
+                    <PillButton kind="secondary" onClick={()=>setPhase("plan")}>Voir le plan</PillButton>
                   </div>
                 ) : (
                   <>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:12}}>
-                      <div style={{fontSize:14,color:INK,fontWeight:500}}>{planOverdue>0?"Jour "+PLAN_DAYS+"+":"Jour "+planDayNum+" / "+PLAN_DAYS}</div>
-                      <div style={{fontSize:13,color:GREY}}>{planDone} / {ALL.length} · {Math.round((planDone/ALL.length)*100)}%</div>
+                      <div style={{fontSize:14,color:INK,fontWeight:500}}>{pv.paused?"En pause":(pv.overdueDays>0?"Jour "+pv.duration+"+":"Jour "+pv.dayNum+" / "+pv.duration)}</div>
+                      <div style={{fontSize:13,color:GREY}}>{pv.completedCount} / {pv.total} · {pv.pct}%</div>
                     </div>
-                    <div style={{height:6,background:TRACK_BG,borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",width:`${(planDone/ALL.length)*100}%`,background:BLUE,borderRadius:3,transition:"width .5s"}}/></div>
-                    {planDueIds.length>0 ? (
+                    <div style={{height:6,background:TRACK_BG,borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",width:`${pv.pct}%`,background:BLUE,borderRadius:3,transition:"width .5s"}}/></div>
+                    {pv.paused ? (
+                      <PillButton onClick={()=>setPhase("plan")} style={{width:"100%",marginTop:16}}>Reprendre le plan</PillButton>
+                    ) : pv.remToday>0 ? (
                       <>
-                        {!planCtaShownInHero&&<PillButton onClick={startPlanSession} style={{width:"100%",marginTop:16}}>{planCta.label}</PillButton>}
+                        {!planCtaShownInHero&&<PillButton onClick={startPlanSession} style={{width:"100%",marginTop:16}}>{planCta?planCta.label:"Commencer la séance"}</PillButton>}
                         {planCtaShownInHero&&<div style={{fontSize:13,color:GREY,marginTop:14}}>C'est ton action du haut de l'écran ↑</div>}
-                        {planOverdue>0&&<div style={{fontSize:13,color:AMBER_TEXT,marginTop:12,background:AMBER_BG,padding:"10px 14px",borderRadius:10}}>Les 14 jours sont écoulés — il te reste {planDueIds.length} question{planDueIds.length>1?"s":""} à rattraper.</div>}
                       </>
                     ) : (
                       <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,background:GREEN_BG,color:GREEN_TEXT,padding:"12px 16px",borderRadius:12,fontSize:14,fontWeight:500,marginTop:16}}>
                         <CheckIcon size={16} stroke={2.5}/>Objectif du jour atteint
                       </div>
                     )}
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:14}}>
+                      <button className="text-btn" onClick={()=>setPhase("plan")} style={{background:"none",border:"none",color:BLUE,fontSize:14,fontWeight:500,padding:0,display:"flex",alignItems:"center",gap:3}}>Voir le plan<ChevronRight size={15}/></button>
+                      {pv.revisionIds.length>0&&<button className="text-btn" onClick={startRevisionSession} style={{background:"none",border:"none",color:AMBER_TEXT,fontSize:13,fontWeight:500,padding:0}}>Réviser {pv.revisionIds.length} erreur{pv.revisionIds.length>1?"s":""}</button>}
+                    </div>
                   </>
                 )}
               </div>
@@ -2712,7 +2977,9 @@ function App(){
           <h2 style={{fontSize:30,fontWeight:600,letterSpacing:"-0.03em",margin:"0 0 8px"}}>{title}</h2>
           <p style={{fontSize:17,color:GREY,margin:"0 0 30px",letterSpacing:"-0.01em"}}>{sub}</p>
           <div style={{display:"flex",flexDirection:"column",gap:12,alignItems:"center"}}>
-            <PillButton onClick={()=>start("all")} style={{minWidth:240}}>Recommencer</PillButton>
+            {(mode==="plan"||mode==="revision")&&plan
+              ? <PillButton onClick={()=>setPhase("plan")} style={{minWidth:240}}>Retour au plan</PillButton>
+              : <PillButton onClick={()=>start("all")} style={{minWidth:240}}>Recommencer</PillButton>}
             {wrong.length>0&&<PillButton kind="secondary" onClick={()=>setPhase("review")} style={{minWidth:240}}>Revoir mes {wrong.length} erreur{wrong.length>1?"s":""}</PillButton>}
             <button className="text-btn" onClick={()=>setShowTutor(true)} style={{background:"none",border:"none",color:BLUE,fontSize:16,marginTop:4,display:"flex",alignItems:"center",gap:6}}><MessageIcon size={16}/>Réviser avec le tuteur</button>
             <button className="text-btn" onClick={()=>setPhase("home")} style={{background:"none",border:"none",color:GREY,fontSize:15}}>Accueil</button>
