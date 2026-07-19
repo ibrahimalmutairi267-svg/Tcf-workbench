@@ -1,0 +1,12 @@
+{
+  "name": "tcf-workbench",
+  "private": true,
+  "version": "1.0.0",
+  "description": "TCF B2 practice website",
+  "scripts": {
+    "build": "esbuild src/app.jsx --bundle --outfile=dist/app.js"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.1"
+  }
+}
