@@ -1457,7 +1457,7 @@ function loadProgress(){ try{ const r=localStorage.getItem(STORE_KEY); return r?
 function getWorkerUrl(){ try{ return localStorage.getItem(WORKER_KEY)||DEFAULT_WORKER; }catch(e){ return DEFAULT_WORKER; } }
 function setWorkerUrl(u){ try{ u?localStorage.setItem(WORKER_KEY,u):localStorage.removeItem(WORKER_KEY); }catch(e){} }
 function isCustomWorker(){ try{ return !!localStorage.getItem(WORKER_KEY); }catch(e){ return false; } }
-function loadAiBank(){ try{ const r=localStorage.getItem(AI_BANK_KEY); return r?JSON.parse(r):[]; }catch(e){ return []; } }
+function loadAiBank(){ try{ const r=localStorage.getItem(AI_BANK_KEY); const arr=r?JSON.parse(r):[]; return Array.isArray(arr)?arr.filter(isStoredAiQuestionUsable):[]; }catch(e){ return []; } }
 function saveAiBank(arr){ try{ localStorage.setItem(AI_BANK_KEY,JSON.stringify(arr)); }catch(e){} }
 function loadPlan(){ try{ const r=localStorage.getItem(PLAN_KEY); return r?JSON.parse(r):null; }catch(e){ return null; } }
 function savePlan(p){ try{ p?localStorage.setItem(PLAN_KEY,JSON.stringify(p)):localStorage.removeItem(PLAN_KEY); }catch(e){} }
@@ -1501,6 +1501,95 @@ function pickGrammarTopic(){
   const topic = pool[Math.floor(Math.random()*pool.length)];
   recentAiTopics = [topic, ...recentAiTopics].slice(0,5);
   return topic;
+}
+
+// ===== AI question validation & de-duplication =====
+// Generated questions are UNTRUSTED model output. Before one can be shown in
+// the quiz (whose renderer/grader are shared with the hand-written bank) or
+// saved to the AI bank, it must match the exact shape those rely on:
+//   { sentence:"… ___ …", options:[4 strings], correct:int 0-3, rule:str, why:[4] }
+// Malformed output is REJECTED, never silently "repaired" — a repair could
+// change which answer is correct, which is worse than a clean retry.
+function stripJsonFences(txt){ return String(txt==null?"":txt).replace(/```json/gi,"").replace(/```/g,"").trim(); }
+function normalizeText(s){
+  return String(s==null?"":s)
+    .toLowerCase()
+    .normalize("NFD").replace(/[̀-ͯ]/g,"") // strip accents
+    .replace(/[^a-z0-9]+/g," ")                       // punctuation -> space
+    .trim().replace(/\s+/g," ");
+}
+// Deterministic gate for freshly generated questions. Returns null when valid,
+// otherwise a short French reason (surfaced/retried by the caller).
+function validateAiQuestion(obj){
+  if(!obj||typeof obj!=="object"||Array.isArray(obj)) return "Réponse IA non structurée.";
+  const sentence=typeof obj.sentence==="string"?obj.sentence.trim():"";
+  if(!sentence) return "Phrase manquante.";
+  if(!sentence.includes("___")) return "Aucun trou « ___ » dans la phrase.";
+  if(/```|<[a-z]/i.test(sentence)) return "Formatage parasite dans la phrase.";
+  if(!Array.isArray(obj.options)||obj.options.length!==4) return "Il faut exactement 4 options.";
+  const opts=obj.options.map(o=>typeof o==="string"?o.trim():"");
+  if(opts.some(o=>!o)) return "Une option est vide.";
+  const norm=opts.map(normalizeText);
+  if(new Set(norm).size!==norm.length) return "Options en double ou équivalentes.";
+  if(!Number.isInteger(obj.correct)||obj.correct<0||obj.correct>3) return "Index de bonne réponse invalide.";
+  if(typeof obj.rule!=="string"||!obj.rule.trim()) return "Explication manquante.";
+  if(!Array.isArray(obj.why)||obj.why.length!==4) return "Le tableau « why » doit avoir 4 éléments.";
+  for(let i=0;i<4;i++){
+    if(i===obj.correct) continue; // why[correct] is expected to be null
+    if(typeof obj.why[i]!=="string"||!obj.why[i].trim()) return "Justification manquante pour un distracteur.";
+  }
+  if(obj.level!=null&&!LEVELS.includes(obj.level)) return "Niveau CEFR invalide.";
+  return null;
+}
+// Looser structural gate used when reading the bank back from localStorage,
+// so a single corrupted saved item can't crash the quiz on load.
+function isStoredAiQuestionUsable(obj){
+  return !!obj && typeof obj==="object" && !Array.isArray(obj)
+    && typeof obj.sentence==="string" && obj.sentence.includes("___")
+    && Array.isArray(obj.options) && obj.options.length===4 && obj.options.every(o=>typeof o==="string" && o.trim())
+    && Number.isInteger(obj.correct) && obj.correct>=0 && obj.correct<4
+    && typeof obj.rule==="string"
+    && Array.isArray(obj.why) && obj.why.length===4;
+}
+// Normalised fingerprint: same sentence + same option set + same correct
+// answer => treated as a duplicate, regardless of option order or accents.
+function aiSignature(obj){
+  const opts=obj.options.map(normalizeText).slice().sort();
+  return normalizeText(obj.sentence)+"||"+opts.join("|")+"||"+normalizeText(obj.options[obj.correct]);
+}
+function isDuplicateAi(obj,bank){
+  const sig=aiSignature(obj);
+  return (bank||[]).some(b=>{ try{ return isStoredAiQuestionUsable(b)&&aiSignature(b)===sig; }catch(e){ return false; } });
+}
+
+// Upgraded generation prompt: an expert TCF item-writer + reviewer, tuned for
+// authentic B2 "Structure de la langue" items with plausible distractors and
+// a single defensible answer. Grammar-only — reading generation is unchanged
+// (it does not exist in this app).
+function buildGrammarPrompt(topic,context){
+  return [
+    "Tu es un concepteur expert d'items du TCF et relecteur d'examen.",
+    "Ta tâche : créer UNE question de « Structure de la langue » (phrase à trou, niveau B2) qui pourrait réellement figurer dans un TCF officiel.",
+    "Objectif : une question authentique — ni devinette, ni piège artificiel, ni vocabulaire obscur. La difficulté doit venir de la maîtrise de la grammaire et du sens en contexte.",
+    "",
+    "POINT TESTÉ (obligatoire) : "+topic+".",
+    "CONTEXTE de la phrase : "+context+". Varie le vocabulaire, le sujet et la longueur de la phrase à chaque génération.",
+    "N'utilise PAS de proposition en « Si » (hypothèse) sauf si le point testé est explicitement le conditionnel — c'est un piège trop facile et surexploité.",
+    "",
+    "RÈGLES IMPÉRATIVES :",
+    "- Exactement UNE seule réponse est incontestablement correcte.",
+    "- Chaque distracteur est plausible (erreur réaliste d'apprenant) mais clairement faux selon la règle de langue.",
+    "- Pas d'options équivalentes ni de doublons ; pas de « toutes les réponses » ni « aucune des réponses ».",
+    "- La bonne réponse n'est ni plus longue ni plus détaillée que les autres ; aucune incohérence grammaticale ne doit trahir la bonne option.",
+    "- N'exige aucune connaissance extérieure ; n'invente aucune information.",
+    "- Niveau B2 : ne rends pas la question difficile par du vocabulaire rare, mais par une distinction fine.",
+    "",
+    "RELECTURE INTERNE (à faire avant de répondre, sans jamais la montrer) : vérifie qu'une seule réponse est défendable, que chaque distracteur est réfutable, que le niveau reste B2, que la formulation ressemble au style TCF, et que la grammaire est correcte. Si un point échoue, recommence en interne.",
+    "",
+    "FORMAT DE SORTIE : réponds UNIQUEMENT avec du JSON brut, sans markdown, sans texte avant ou après :",
+    '{"sentence":"phrase avec ___ à l\'emplacement du trou","options":["..","..","..",".."],"correct":<index 0-3 de la bonne option>,"rule":"règle expliquée en français, concise","why":["raison pour laquelle cette option est fausse","..","..",".."],"level":"B2","skill":"'+topic+'"}',
+    "Mets null à la place de la bonne réponse dans « why ». « why » doit contenir exactement 4 éléments, alignés un à un sur « options ».",
+  ].join("\n");
 }
 
 // Talks to your own Cloudflare Worker, which holds the Anthropic API key
@@ -1615,6 +1704,7 @@ function App(){
   const [aiQuestion,setAiQuestion]=useState(null);
   const [aiLoading,setAiLoading]=useState(false);
   const [aiError,setAiError]=useState("");
+  const genLock=useRef(false); // hard guard so a rapid double-click can't launch two generations
   const [deepExpl,setDeepExpl]=useState("");
   const [deepLoading,setDeepLoading]=useState(false);
   const [workerUrlInput,setWorkerUrlInput]=useState(isCustomWorker()?getWorkerUrl():"");
@@ -1700,18 +1790,35 @@ function App(){
     else { const nc=current+1; setCurrent(nc); setSelected(null); persist(stats,{order:questions.map(x=>x.id),current:nc,score,wrong,mode}); }
   }
   async function generateAIQuestion(){
+    if(genLock.current) return; // already generating — ignore the extra click
+    genLock.current=true;
     setAiLoading(true); setSelected(null); setDeepExpl(""); setAiError(""); setAiQuestion(null);
     try{
       const topic=pickGrammarTopic();
       const context=AI_CONTEXTS[Math.floor(Math.random()*AI_CONTEXTS.length)];
-      const system="Tu es examinateur du TCF niveau B2. Génère UNE question de type « Structure de la langue » (phrase à trou, 4 options A/B/C/D) qui teste précisément ce point de grammaire : "+topic+". Ancre la phrase dans ce contexte : "+context+". Varie le vocabulaire et la longueur de la phrase à chaque génération. N'utilise PAS de proposition en « Si » (hypothèse) sauf si le point testé est explicitement le conditionnel — c'est un piège trop facile et déjà trop utilisé, évite-le. Réponds UNIQUEMENT en JSON brut sans markdown : {\"sentence\":\"phrase avec ___ pour le trou\",\"options\":[\"..\",\"..\",\"..\",\"..\"],\"correct\":0,\"rule\":\"règle en français\",\"why\":[\"pourquoi faux ou null\",\"..\",\"..\",\"..\"]}. null pour la bonne réponse.";
-      const txt=await askClaude(system,[{role:"user",content:"Nouvelle question B2 sur : "+topic+"."}],700);
-      const obj=JSON.parse(txt.replace(/```json/g,"").replace(/```/g,"").trim());
+      const system=buildGrammarPrompt(topic,context);
+      // The model occasionally returns a malformed or duplicate item. Give it a
+      // few tries, validating each candidate deterministically. Bad output is
+      // rejected and retried, never patched (a patch could change the answer).
+      let obj=null, lastErr="";
+      for(let attempt=0;attempt<3;attempt++){
+        const txt=await askClaude(system,[{role:"user",content:"Nouvelle question B2 sur : "+topic+"."}],800);
+        let cand;
+        try{ cand=JSON.parse(stripJsonFences(txt)); }
+        catch(e){ lastErr="Format JSON invalide."; continue; }
+        const err=validateAiQuestion(cand);
+        if(err){ lastErr=err; continue; }
+        if(isDuplicateAi(cand,loadAiBank())){ lastErr="Question déjà générée."; continue; }
+        obj=cand; break;
+      }
+      if(!obj) throw new Error(lastErr||"Question invalide.");
       obj.id="ai-"+Date.now()+"-"+Math.random().toString(36).slice(2,8);
       obj.type="grammar"; obj.aiGenerated=true; obj.topic=topic;
+      if(!obj.level) obj.level="B2";
       setAiQuestion(obj); setSelected(null);
       setAiBank(prev=>{ const next=[obj,...prev].slice(0,AI_BANK_MAX); saveAiBank(next); return next; });
     }catch(e){ setAiError(e.message==="NO_WORKER"?"Configure d'abord ton serveur IA (Réglages).":"Erreur IA : "+e.message); }
+    genLock.current=false;
     setAiLoading(false);
   }
   async function explainDeeper(){
