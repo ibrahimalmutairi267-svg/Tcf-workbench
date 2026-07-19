@@ -1598,10 +1598,170 @@ function PillButton({ onClick, children, kind="primary", disabled, style }){
   return <button className="pill-btn" onClick={onClick} disabled={disabled} style={{...base,...kinds[kind]}}>{children}</button>;
 }
 
+const ALL = [...QUESTIONS.map(q=>({...q,type:q.type||"grammar"})), ...READING.map(q=>({...q,type:"reading"}))].map((q,i)=>({...q,id:i}));
+const GRAMMAR_COUNT = QUESTIONS.length;
+const READING_COUNT = READING.length;
+
+// ===== Tutor Chat =====
+// Starter prompts, grouped — shown on the empty state so the tutor's
+// capabilities are discoverable instead of facing a blank box.
+const TUTOR_STARTERS = [
+  { cat:"Grammaire", icon:TypeIcon, items:[
+    "Explique-moi le subjonctif simplement, avec 3 exemples.",
+    "Quelle est la différence entre « dont » et « que » ?",
+    "Imparfait ou passé composé : comment choisir ?",
+  ]},
+  { cat:"Vocabulaire", icon:BookIcon, items:[
+    "Différence entre « apporter », « amener » et « emmener » ?",
+    "Donne-moi 10 connecteurs logiques utiles au niveau B2.",
+    "Explique l'expression « faire fi de » avec des exemples.",
+  ]},
+  { cat:"Entraînement", icon:TargetIcon, items:[
+    "Pose-moi 3 questions de niveau B2 sur les pronoms relatifs.",
+    "Corrige cette phrase : « Bien que je suis fatigué, je continue. »",
+    "Fais-moi réviser mes points faibles.",
+  ]},
+  { cat:"Stratégie TCF", icon:SparkleIcon, items:[
+    "Comment gérer mon temps pendant l'épreuve de compréhension écrite ?",
+    "Quels sont les pièges les plus fréquents au TCF B2 ?",
+    "Que dois-je réviser en priorité pour viser B2 ?",
+  ]},
+];
+
+function TutorChat({ onClose, stats }){
+  const [msgs,setMsgs]=useState([]);
+  const [input,setInput]=useState(""); const [busy,setBusy]=useState(false);
+  const sc=useRef(null); const ta=useRef(null);
+  useEffect(()=>{ if(sc.current) sc.current.scrollTop=sc.current.scrollHeight; },[msgs,busy]);
+  useEffect(()=>{ const el=ta.current; if(el){ el.style.height="auto"; el.style.height=Math.min(el.scrollHeight,120)+"px"; } },[input]);
+
+  // Give the tutor real context about this learner so answers aren't generic.
+  function buildSystem(){
+    const weak=ALL.filter(x=>stats.strugglingIds.includes(x.id));
+    const byLevel=weak.reduce((m,x)=>(m[x.level]=(m[x.level]||0)+1,m),{});
+    const weakTopics=weak.slice(0,6).map(x=>x.type==="reading"?"compréhension écrite":(x.rule||"").slice(0,60)).filter(Boolean);
+    const acc=stats.lifetimeAnswered>0?Math.round((stats.lifetimeCorrect/stats.lifetimeAnswered)*100):null;
+    return [
+      "Tu es un tuteur de français expert, spécialiste du TCF niveau B2. Tu es patient, chaleureux et direct.",
+      "RÈGLES DE RÉPONSE :",
+      "- Réponds dans la langue de l'élève (français par défaut, anglais s'il écrit en anglais).",
+      "- Sois CONCIS : 150 mots maximum sauf si on te demande d'approfondir.",
+      "- Donne TOUJOURS au moins un exemple concret en français, entre guillemets « … ».",
+      "- Mets les termes clés importants en **gras**.",
+      "- Utilise des listes à puces quand tu compares plusieurs éléments.",
+      "- Termine par UNE question courte ou un mini-exercice pour faire pratiquer l'élève.",
+      "- N'invente jamais une règle : si tu hésites, dis-le.",
+      "- Pas de markdown autre que **gras** et les listes à puces (pas de titres #).",
+      "CONTEXTE SUR L'ÉLÈVE :",
+      acc!==null?`- Taux de réussite actuel : ${acc}% sur ${stats.lifetimeAnswered} questions.`:"- Il commence tout juste à s'entraîner.",
+      weak.length?`- Il a ${weak.length} question(s) en difficulté, réparties par niveau : ${Object.entries(byLevel).map(([k,v])=>k+":"+v).join(", ")}.`:"",
+      weakTopics.length?`- Exemples de points ratés : ${weakTopics.join(" | ")}`:"",
+      "Utilise ce contexte pour cibler tes conseils, sans le réciter à l'élève.",
+    ].filter(Boolean).join("\n");
+  }
+
+  async function send(text){
+    const content=(text!==undefined?text:input).trim();
+    if(!content||busy) return;
+    const nm=[...msgs,{role:"user",content}]; setMsgs(nm); setInput(""); setBusy(true);
+    try{
+      const txt=await askClaude(buildSystem(),nm.map(m=>({role:m.role,content:m.content})),800);
+      setMsgs(m=>[...m,{role:"assistant",content:txt}]);
+    }catch(e){
+      setMsgs(m=>[...m,{role:"assistant",content:e.message==="NO_WORKER"?"Configure d'abord ton serveur IA dans **Réglages** pour activer le tuteur.":"Erreur : "+e.message}]);
+    }
+    setBusy(false);
+  }
+
+  const empty=msgs.length===0;
+  return (
+    <div style={{position:"fixed",inset:0,background:BG,zIndex:50,display:"flex",flexDirection:"column",paddingTop:"env(safe-area-inset-top)"}}>
+      {/* Header */}
+      <header style={{padding:"14px 18px",display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:"1px solid "+LINE,background:"rgba(255,255,255,0.82)",backdropFilter:"blur(20px)",flexShrink:0}}>
+        <div style={{display:"flex",alignItems:"center",gap:11}}>
+          <div style={{width:34,height:34,borderRadius:11,background:"linear-gradient(155deg,#0071e3,#0058b0)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+            <SparkleIcon size={17} style={{color:"#fff"}}/>
+          </div>
+          <div style={{lineHeight:1.25}}>
+            <div style={{fontWeight:600,fontSize:16,letterSpacing:"-0.02em"}}>Tuteur</div>
+            <div style={{fontSize:12,color:busy?BLUE:GREY}}>{busy?"écrit…":"Spécialiste TCF B2"}</div>
+          </div>
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:14}}>
+          {!empty&&<button className="text-btn" onClick={()=>setMsgs([])} aria-label="Nouvelle conversation" style={{background:"none",border:"none",color:GREY,padding:0,display:"flex"}}><RefreshIcon size={18}/></button>}
+          <button className="text-btn" onClick={onClose} style={{background:"none",border:"none",color:BLUE,fontSize:16}}>Fermer</button>
+        </div>
+      </header>
+
+      {/* Messages / welcome */}
+      <main ref={sc} className="tutor-scroll" style={{flex:1,overflowY:"auto",padding:"20px 18px",display:"flex",flexDirection:"column",gap:14}}>
+        {empty ? (
+          <div className="fade" style={{paddingTop:8}}>
+            <div style={{textAlign:"center",marginBottom:26}}>
+              <div style={{width:56,height:56,borderRadius:18,background:"linear-gradient(155deg,#0071e3,#0058b0)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 14px",boxShadow:"0 8px 24px rgba(0,113,227,.28)"}}>
+                <SparkleIcon size={26} style={{color:"#fff"}}/>
+              </div>
+              <h1 style={{fontSize:25,fontWeight:600,letterSpacing:"-0.03em",margin:"0 0 6px"}}>Comment puis-je t'aider ?</h1>
+              <p style={{fontSize:15,color:GREY,margin:0,lineHeight:1.45,maxWidth:330,marginLeft:"auto",marginRight:"auto"}}>Pose une question, demande une règle, ou fais-toi interroger. Voici quelques idées :</p>
+            </div>
+            <div style={{display:"flex",flexDirection:"column",gap:20,maxWidth:520,margin:"0 auto",width:"100%"}}>
+              {TUTOR_STARTERS.map(g=>(
+                <div key={g.cat}>
+                  <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:9}}>
+                    <g.icon size={14} style={{color:BLUE}}/>
+                    <span style={{fontSize:12,fontWeight:600,color:GREY,textTransform:"uppercase",letterSpacing:"0.05em"}}>{g.cat}</span>
+                  </div>
+                  <div style={{display:"flex",flexDirection:"column",gap:7}}>
+                    {g.items.map(s=>(
+                      <button key={s} className="chip" onClick={()=>send(s)}>{s}</button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : msgs.map((m,i)=>(
+          <div key={i} className="msg-in" style={{display:"flex",gap:9,alignItems:"flex-end",flexDirection:m.role==="user"?"row-reverse":"row"}}>
+            {m.role==="assistant"&&(
+              <div style={{width:26,height:26,borderRadius:9,background:"linear-gradient(155deg,#0071e3,#0058b0)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginBottom:2}}>
+                <SparkleIcon size={13} style={{color:"#fff"}}/>
+              </div>
+            )}
+            <div style={{maxWidth:"84%",background:m.role==="user"?BLUE:CARD,color:m.role==="user"?"#fff":INK,borderRadius:20,borderBottomRightRadius:m.role==="user"?6:20,borderBottomLeftRadius:m.role==="user"?20:6,padding:"12px 16px",fontSize:15,lineHeight:1.55,boxShadow:m.role==="user"?"0 2px 10px rgba(0,113,227,.22)":"0 1px 6px rgba(0,0,0,0.06)"}}>
+              {m.role==="user"?<span style={{whiteSpace:"pre-wrap"}}>{m.content}</span>:<RichText text={m.content}/>}
+            </div>
+          </div>
+        ))}
+        {busy&&(
+          <div className="msg-in" style={{display:"flex",gap:9,alignItems:"flex-end"}}>
+            <div style={{width:26,height:26,borderRadius:9,background:"linear-gradient(155deg,#0071e3,#0058b0)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginBottom:2}}>
+              <SparkleIcon size={13} style={{color:"#fff"}}/>
+            </div>
+            <div style={{background:CARD,borderRadius:20,borderBottomLeftRadius:6,padding:"14px 16px",boxShadow:"0 1px 6px rgba(0,0,0,0.06)"}}>
+              <div className="typing"><i/><i/><i/></div>
+            </div>
+          </div>
+        )}
+      </main>
+
+      {/* Composer */}
+      <div style={{padding:"12px 14px",paddingBottom:"max(12px,env(safe-area-inset-bottom))",background:"rgba(255,255,255,0.9)",backdropFilter:"blur(20px)",borderTop:"1px solid "+LINE,flexShrink:0}}>
+        <div style={{display:"flex",gap:9,alignItems:"flex-end",maxWidth:640,margin:"0 auto"}}>
+          <textarea ref={ta} value={input} onChange={e=>setInput(e.target.value)}
+            onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send();}}}
+            placeholder="Pose ta question…" rows={1}
+            style={{flex:1,borderRadius:20,border:"1px solid "+LINE,padding:"11px 16px",fontSize:16,resize:"none",outline:"none",maxHeight:120,background:BG,lineHeight:1.4}}/>
+          <button className="pill-btn" onClick={()=>send()} disabled={busy||!input.trim()} aria-label="Envoyer"
+            style={{borderRadius:"50%",width:40,height:40,border:"none",background:busy||!input.trim()?"#c7c7cc":BLUE,color:"#fff",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",marginBottom:1}}>
+            <ChevronRight size={18} stroke={2.5} style={{transform:"rotate(-90deg)"}}/>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function App(){
-  const ALL = [...QUESTIONS.map(q=>({...q,type:q.type||"grammar"})), ...READING.map(q=>({...q,type:"reading"}))].map((q,i)=>({...q,id:i}));
-  const GRAMMAR_COUNT = QUESTIONS.length;
-  const READING_COUNT = READING.length;
   const levelCounts = useMemo(()=>ALL.reduce((m,q)=>(q.level&&(m[q.level]=(m[q.level]||0)+1),m),{}),[]);
   const [questions,setQuestions]=useState([]);
   const [current,setCurrent]=useState(0);
@@ -1731,165 +1891,6 @@ function App(){
     return (<span>{p[0]}<span style={{display:"inline-block",borderBottom:"2px solid "+BLUE,minWidth:54,margin:"0 5px",color:selected!==null?BLUE:"transparent",fontWeight:600}}>{selected!==null?q.options[q.correct]:"\u00A0\u00A0\u00A0\u00A0\u00A0"}</span>{p[1]}</span>);
   }
 
-  // ===== Tutor Chat =====
-  // Starter prompts, grouped — shown on the empty state so the tutor's
-  // capabilities are discoverable instead of facing a blank box.
-  const TUTOR_STARTERS = [
-    { cat:"Grammaire", icon:TypeIcon, items:[
-      "Explique-moi le subjonctif simplement, avec 3 exemples.",
-      "Quelle est la différence entre « dont » et « que » ?",
-      "Imparfait ou passé composé : comment choisir ?",
-    ]},
-    { cat:"Vocabulaire", icon:BookIcon, items:[
-      "Différence entre « apporter », « amener » et « emmener » ?",
-      "Donne-moi 10 connecteurs logiques utiles au niveau B2.",
-      "Explique l'expression « faire fi de » avec des exemples.",
-    ]},
-    { cat:"Entraînement", icon:TargetIcon, items:[
-      "Pose-moi 3 questions de niveau B2 sur les pronoms relatifs.",
-      "Corrige cette phrase : « Bien que je suis fatigué, je continue. »",
-      "Fais-moi réviser mes points faibles.",
-    ]},
-    { cat:"Stratégie TCF", icon:SparkleIcon, items:[
-      "Comment gérer mon temps pendant l'épreuve de compréhension écrite ?",
-      "Quels sont les pièges les plus fréquents au TCF B2 ?",
-      "Que dois-je réviser en priorité pour viser B2 ?",
-    ]},
-  ];
-
-  function TutorChat({ onClose }){
-    const [msgs,setMsgs]=useState([]);
-    const [input,setInput]=useState(""); const [busy,setBusy]=useState(false);
-    const sc=useRef(null); const ta=useRef(null);
-    useEffect(()=>{ if(sc.current) sc.current.scrollTop=sc.current.scrollHeight; },[msgs,busy]);
-    useEffect(()=>{ const el=ta.current; if(el){ el.style.height="auto"; el.style.height=Math.min(el.scrollHeight,120)+"px"; } },[input]);
-
-    // Give the tutor real context about this learner so answers aren't generic.
-    function buildSystem(){
-      const weak=ALL.filter(x=>stats.strugglingIds.includes(x.id));
-      const byLevel=weak.reduce((m,x)=>(m[x.level]=(m[x.level]||0)+1,m),{});
-      const weakTopics=weak.slice(0,6).map(x=>x.type==="reading"?"compréhension écrite":(x.rule||"").slice(0,60)).filter(Boolean);
-      const acc=stats.lifetimeAnswered>0?Math.round((stats.lifetimeCorrect/stats.lifetimeAnswered)*100):null;
-      return [
-        "Tu es un tuteur de français expert, spécialiste du TCF niveau B2. Tu es patient, chaleureux et direct.",
-        "RÈGLES DE RÉPONSE :",
-        "- Réponds dans la langue de l'élève (français par défaut, anglais s'il écrit en anglais).",
-        "- Sois CONCIS : 150 mots maximum sauf si on te demande d'approfondir.",
-        "- Donne TOUJOURS au moins un exemple concret en français, entre guillemets « … ».",
-        "- Mets les termes clés importants en **gras**.",
-        "- Utilise des listes à puces quand tu compares plusieurs éléments.",
-        "- Termine par UNE question courte ou un mini-exercice pour faire pratiquer l'élève.",
-        "- N'invente jamais une règle : si tu hésites, dis-le.",
-        "- Pas de markdown autre que **gras** et les listes à puces (pas de titres #).",
-        "CONTEXTE SUR L'ÉLÈVE :",
-        acc!==null?`- Taux de réussite actuel : ${acc}% sur ${stats.lifetimeAnswered} questions.`:"- Il commence tout juste à s'entraîner.",
-        weak.length?`- Il a ${weak.length} question(s) en difficulté, réparties par niveau : ${Object.entries(byLevel).map(([k,v])=>k+":"+v).join(", ")}.`:"",
-        weakTopics.length?`- Exemples de points ratés : ${weakTopics.join(" | ")}`:"",
-        "Utilise ce contexte pour cibler tes conseils, sans le réciter à l'élève.",
-      ].filter(Boolean).join("\n");
-    }
-
-    async function send(text){
-      const content=(text!==undefined?text:input).trim();
-      if(!content||busy) return;
-      const nm=[...msgs,{role:"user",content}]; setMsgs(nm); setInput(""); setBusy(true);
-      try{
-        const txt=await askClaude(buildSystem(),nm.map(m=>({role:m.role,content:m.content})),800);
-        setMsgs(m=>[...m,{role:"assistant",content:txt}]);
-      }catch(e){
-        setMsgs(m=>[...m,{role:"assistant",content:e.message==="NO_WORKER"?"Configure d'abord ton serveur IA dans **Réglages** pour activer le tuteur.":"Erreur : "+e.message}]);
-      }
-      setBusy(false);
-    }
-
-    const empty=msgs.length===0;
-    return (
-      <div style={{position:"fixed",inset:0,background:BG,zIndex:50,display:"flex",flexDirection:"column",paddingTop:"env(safe-area-inset-top)"}}>
-        {/* Header */}
-        <header style={{padding:"14px 18px",display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:"1px solid "+LINE,background:"rgba(255,255,255,0.82)",backdropFilter:"blur(20px)",flexShrink:0}}>
-          <div style={{display:"flex",alignItems:"center",gap:11}}>
-            <div style={{width:34,height:34,borderRadius:11,background:"linear-gradient(155deg,#0071e3,#0058b0)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-              <SparkleIcon size={17} style={{color:"#fff"}}/>
-            </div>
-            <div style={{lineHeight:1.25}}>
-              <div style={{fontWeight:600,fontSize:16,letterSpacing:"-0.02em"}}>Tuteur</div>
-              <div style={{fontSize:12,color:busy?BLUE:GREY}}>{busy?"écrit…":"Spécialiste TCF B2"}</div>
-            </div>
-          </div>
-          <div style={{display:"flex",alignItems:"center",gap:14}}>
-            {!empty&&<button className="text-btn" onClick={()=>setMsgs([])} aria-label="Nouvelle conversation" style={{background:"none",border:"none",color:GREY,padding:0,display:"flex"}}><RefreshIcon size={18}/></button>}
-            <button className="text-btn" onClick={onClose} style={{background:"none",border:"none",color:BLUE,fontSize:16}}>Fermer</button>
-          </div>
-        </header>
-
-        {/* Messages / welcome */}
-        <main ref={sc} className="tutor-scroll" style={{flex:1,overflowY:"auto",padding:"20px 18px",display:"flex",flexDirection:"column",gap:14}}>
-          {empty ? (
-            <div className="fade" style={{paddingTop:8}}>
-              <div style={{textAlign:"center",marginBottom:26}}>
-                <div style={{width:56,height:56,borderRadius:18,background:"linear-gradient(155deg,#0071e3,#0058b0)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 14px",boxShadow:"0 8px 24px rgba(0,113,227,.28)"}}>
-                  <SparkleIcon size={26} style={{color:"#fff"}}/>
-                </div>
-                <h1 style={{fontSize:25,fontWeight:600,letterSpacing:"-0.03em",margin:"0 0 6px"}}>Comment puis-je t'aider ?</h1>
-                <p style={{fontSize:15,color:GREY,margin:0,lineHeight:1.45,maxWidth:330,marginLeft:"auto",marginRight:"auto"}}>Pose une question, demande une règle, ou fais-toi interroger. Voici quelques idées :</p>
-              </div>
-              <div style={{display:"flex",flexDirection:"column",gap:20,maxWidth:520,margin:"0 auto",width:"100%"}}>
-                {TUTOR_STARTERS.map(g=>(
-                  <div key={g.cat}>
-                    <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:9}}>
-                      <g.icon size={14} style={{color:BLUE}}/>
-                      <span style={{fontSize:12,fontWeight:600,color:GREY,textTransform:"uppercase",letterSpacing:"0.05em"}}>{g.cat}</span>
-                    </div>
-                    <div style={{display:"flex",flexDirection:"column",gap:7}}>
-                      {g.items.map(s=>(
-                        <button key={s} className="chip" onClick={()=>send(s)}>{s}</button>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : msgs.map((m,i)=>(
-            <div key={i} className="msg-in" style={{display:"flex",gap:9,alignItems:"flex-end",flexDirection:m.role==="user"?"row-reverse":"row"}}>
-              {m.role==="assistant"&&(
-                <div style={{width:26,height:26,borderRadius:9,background:"linear-gradient(155deg,#0071e3,#0058b0)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginBottom:2}}>
-                  <SparkleIcon size={13} style={{color:"#fff"}}/>
-                </div>
-              )}
-              <div style={{maxWidth:"84%",background:m.role==="user"?BLUE:CARD,color:m.role==="user"?"#fff":INK,borderRadius:20,borderBottomRightRadius:m.role==="user"?6:20,borderBottomLeftRadius:m.role==="user"?20:6,padding:"12px 16px",fontSize:15,lineHeight:1.55,boxShadow:m.role==="user"?"0 2px 10px rgba(0,113,227,.22)":"0 1px 6px rgba(0,0,0,0.06)"}}>
-                {m.role==="user"?<span style={{whiteSpace:"pre-wrap"}}>{m.content}</span>:<RichText text={m.content}/>}
-              </div>
-            </div>
-          ))}
-          {busy&&(
-            <div className="msg-in" style={{display:"flex",gap:9,alignItems:"flex-end"}}>
-              <div style={{width:26,height:26,borderRadius:9,background:"linear-gradient(155deg,#0071e3,#0058b0)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginBottom:2}}>
-                <SparkleIcon size={13} style={{color:"#fff"}}/>
-              </div>
-              <div style={{background:CARD,borderRadius:20,borderBottomLeftRadius:6,padding:"14px 16px",boxShadow:"0 1px 6px rgba(0,0,0,0.06)"}}>
-                <div className="typing"><i/><i/><i/></div>
-              </div>
-            </div>
-          )}
-        </main>
-
-        {/* Composer */}
-        <div style={{padding:"12px 14px",paddingBottom:"max(12px,env(safe-area-inset-bottom))",background:"rgba(255,255,255,0.9)",backdropFilter:"blur(20px)",borderTop:"1px solid "+LINE,flexShrink:0}}>
-          <div style={{display:"flex",gap:9,alignItems:"flex-end",maxWidth:640,margin:"0 auto"}}>
-            <textarea ref={ta} value={input} onChange={e=>setInput(e.target.value)}
-              onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send();}}}
-              placeholder="Pose ta question…" rows={1}
-              style={{flex:1,borderRadius:20,border:"1px solid "+LINE,padding:"11px 16px",fontSize:16,resize:"none",outline:"none",maxHeight:120,background:BG,lineHeight:1.4}}/>
-            <button className="pill-btn" onClick={()=>send()} disabled={busy||!input.trim()} aria-label="Envoyer"
-              style={{borderRadius:"50%",width:40,height:40,border:"none",background:busy||!input.trim()?"#c7c7cc":BLUE,color:"#fff",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",marginBottom:1}}>
-              <ChevronRight size={18} stroke={2.5} style={{transform:"rotate(-90deg)"}}/>
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   // ===== Settings =====
   if(showSettings){
     return (
@@ -1944,7 +1945,7 @@ function App(){
       </div>
     );
   }
-  if(showTutor) return <TutorChat onClose={()=>setShowTutor(false)} />;
+  if(showTutor) return <TutorChat onClose={()=>setShowTutor(false)} stats={stats} />;
 
   // ===== Home =====
   if(phase==="home"){
