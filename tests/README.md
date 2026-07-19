@@ -9,7 +9,7 @@ verify.
 ```
 npm ci               # clean install from the committed lockfile
 npm run build        # esbuild src/app.jsx -> dist/app.js
-npm run test:data    # data-integrity + production-build checks (Node built-in test runner)
+npm run test:data    # data-integrity + production-build + PWA integrity checks (Node built-in test runner)
 npm run test:e2e     # Playwright end-to-end regression tests (Chromium)
 npm test             # build + test:data + test:e2e, in order
 ```
@@ -63,6 +63,51 @@ npm test             # build + test:data + test:e2e, in order
   automatically by `npm test`) to regenerate the baseline above. Only run
   this after an intentional, human-reviewed content change, and commit the
   regenerated baseline as its own reviewed change.
+- `pwa-integrity.test.js` — Phase 5 PWA checks: `manifest.webmanifest`
+  exists, is valid JSON, has the required fields, `display: "standalone"`,
+  a relative (GitHub-Pages-subpath-compatible) `start_url`/`scope`, and
+  192/512/maskable icons that resolve to real files; `index.html`
+  references the manifest and `pwa-register.js`; and a set of *behavioral*
+  checks (via `helpers/service-worker-harness.js`) proving the service
+  worker precaches the required local app-shell files, uses a versioned
+  cache name, deletes obsolete caches and calls `clients.claim()` on
+  activate, never intercepts non-GET requests or the Tutor/Cloudflare
+  Worker endpoint, and falls back to the cached shell for offline
+  navigation.
+- `pwa.spec.js` — Playwright browser tests (service workers explicitly
+  allowed via `test.use({ serviceWorkers: 'allow' })`, since the default in
+  `playwright.config.js` blocks them for the other, unrelated functional
+  tests): the service worker registers and reaches `activated`, the
+  manifest and icons load successfully, the same-origin app shell
+  (`dist/app.js`, manifest, icons) is served correctly while offline, an
+  offline reload serves the cached shell instead of a browser error page,
+  no Babel request ever occurs, and the Tutor's Cloudflare Worker endpoint
+  is always hit live (two distinct calls for two distinct questions,
+  proving nothing is cached/stale).
+- `helpers/service-worker-harness.js` — runs the real `service-worker.js`
+  source in an isolated `vm` sandbox with a minimal in-memory polyfill of
+  the Cache Storage API, so install/activate/fetch behavior can be
+  verified directly in Node without a browser.
+
+## A note on Phase 5 (PWA) test scope
+
+This sandboxed environment's outbound network policy blocks the real
+`cdnjs.cloudflare.com` CDN entirely (confirmed independently: a direct
+request returns HTTP 403 "Host not in allowlist"). `pwa.spec.js` mocks
+those two CDN requests so tests can run hermetically, but that mocking only
+applies to a page's *first* navigation — once the service worker has
+activated and starts controlling the page, it intercepts fetches from
+within its own execution context, which Playwright's request mocking
+cannot see in this Playwright version. Automated browser tests therefore
+verify every part of the offline mechanism that doesn't depend on reaching
+that specific CDN (registration, manifest/icons, the same-origin app-shell
+precache, and the offline navigation fallback). Full end-to-end offline
+rendering (Home/Grammar/Reading/Quick with React actually executing,
+across a genuine `context.setOffline(true)` reload) was additionally
+verified manually with a same-origin substitute for the CDN scripts — see
+the Phase 5 report for that walkthrough. `service-worker.js` itself is
+unaffected by any of this — it always references the real, unmodified
+cdnjs URLs.
 
 ## Philosophy
 

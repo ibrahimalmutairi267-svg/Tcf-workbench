@@ -5,7 +5,7 @@
   "description": "TCF B2 practice website",
   "scripts": {
     "build": "esbuild src/app.jsx --bundle --outfile=dist/app.js",
-    "test:data": "node tests/data-integrity.test.js && node tests/build-integrity.test.js",
+    "test:data": "node tests/data-integrity.test.js && node tests/build-integrity.test.js && node tests/pwa-integrity.test.js",
     "test:e2e": "playwright test",
     "test": "npm run build && npm run test:data && npm run test:e2e"
   },
