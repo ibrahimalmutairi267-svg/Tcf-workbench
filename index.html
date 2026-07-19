@@ -1472,6 +1472,11 @@ const PLAN_DAYS = 14;                       // legacy default (kept for migratio
 const PLAN_DEFAULT_DURATION = 14;
 const PLAN_DURATIONS = [7,10,14,21,30];     // preset target lengths, plus "custom"
 const PLAN_MIN_DAYS = 1, PLAN_MAX_DAYS = 120;
+// Optional review sessions (mistakes / plan revision queue). These are
+// transient: they must NEVER become the resumable "Reprendre" session, so
+// they can't hijack the user's real practice/plan progress.
+const REVIEW_MODES = ["struggling","revision"];
+const isReviewMode = (m)=>REVIEW_MODES.includes(m);
 
 function saveProgress(d){ try{ localStorage.setItem(STORE_KEY,JSON.stringify(d)); }catch(e){} }
 function loadProgress(){ try{ const r=localStorage.getItem(STORE_KEY); return r?JSON.parse(r):null; }catch(e){ return null; } }
@@ -2159,8 +2164,10 @@ function App(){
 
   const startPool=(pool,m)=>{
     if(!pool.length) return;
-    setMode(m); setQuestions(pool); setCurrent(0); setSelected(null); setScore(0); setWrong([]); resetDeepExpl(); setAiQuestion(null); setPhase("quiz"); setHasSession(true);
-    saveProgress({stats,session:{order:pool.map(x=>x.id),current:0,score:0,wrong:[],mode:m}});
+    setMode(m); setQuestions(pool); setCurrent(0); setSelected(null); setScore(0); setWrong([]); resetDeepExpl(); setAiQuestion(null); setPhase("quiz");
+    // A review session runs in-memory only; it neither becomes the resumable
+    // session nor disturbs the one already saved.
+    if(!isReviewMode(m)){ setHasSession(true); saveProgress({stats,session:{order:pool.map(x=>x.id),current:0,score:0,wrong:[],mode:m}}); }
   };
   const startPlanSession=()=>{ if(pv) startPool(pv.todayQueue.map(id=>ALL[id]).filter(Boolean),"plan"); };
   const startContinueAhead=()=>{ if(pv) startPool(pv.nextQueue.map(id=>ALL[id]).filter(Boolean),"plan"); };
@@ -2223,12 +2230,25 @@ function App(){
     const mastered=new Set(stats.masteredIds),struggling=new Set(stats.strugglingIds);
     if(correct){ mastered.add(q.id); struggling.delete(q.id);} else { struggling.add(q.id); mastered.delete(q.id);} 
     const ns={...stats,lifetimeCorrect:stats.lifetimeCorrect+(correct?1:0),lifetimeAnswered:stats.lifetimeAnswered+1,masteredIds:[...mastered],strugglingIds:[...struggling]};
-    setStats(ns); persist(ns,{order:questions.map(x=>x.id),current,score:newScore,wrong:newWrong,mode});
+    setStats(ns);
+    // Review sessions save stats but leave the resumable session untouched.
+    if(isReviewMode(mode)){ const prev=loadProgress(); persist(ns, prev&&prev.session?prev.session:null); }
+    else persist(ns,{order:questions.map(x=>x.id),current,score:newScore,wrong:newWrong,mode});
   }
   function next(){
     setAiQuestion(null); resetDeepExpl();
-    if(current+1>=total){ const pct=Math.round((score/total)*100); const fs={...stats,sessions:stats.sessions+1,bestPct:Math.max(stats.bestPct,pct)}; setStats(fs); persist(fs,null); setHasSession(false); setPhase("result"); }
-    else { const nc=current+1; setCurrent(nc); setSelected(null); persist(stats,{order:questions.map(x=>x.id),current:nc,score,wrong,mode}); }
+    const review=isReviewMode(mode);
+    if(current+1>=total){
+      const pct=Math.round((score/total)*100); const fs={...stats,sessions:stats.sessions+1,bestPct:Math.max(stats.bestPct,pct)}; setStats(fs);
+      if(review){ const prev=loadProgress(); persist(fs, prev&&prev.session?prev.session:null); }
+      else { persist(fs,null); setHasSession(false); }
+      setPhase("result");
+    }
+    else {
+      const nc=current+1; setCurrent(nc); setSelected(null);
+      if(review){ const prev=loadProgress(); persist(stats, prev&&prev.session?prev.session:null); }
+      else persist(stats,{order:questions.map(x=>x.id),current:nc,score,wrong,mode});
+    }
   }
   async function generateAIQuestion(){
     if(genLock.current) return; // already generating — ignore the extra click
@@ -2823,7 +2843,7 @@ function App(){
               </div>
 
               {struggling>0&&(
-                <div className="fade hcard" onClick={()=>{ const pool=shuffle([...ALL,...aiBank].filter(qq=>stats.strugglingIds.includes(qq.id))); setMode("struggling"); setQuestions(pool); setCurrent(0); setSelected(null); setScore(0); setWrong([]); setPhase("quiz"); setHasSession(true); saveProgress({stats,session:{order:pool.map(qq=>qq.id),current:0,score:0,wrong:[],mode:"struggling"}}); }} style={{background:CARD,border:"1px solid "+LINE,borderRadius:16,padding:"18px 20px",boxShadow:SHADOW_XS,marginBottom:16,display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}}>
+                <div className="fade hcard" onClick={()=>{ const pool=shuffle([...ALL,...aiBank].filter(qq=>stats.strugglingIds.includes(qq.id))); startPool(pool,"struggling"); }} style={{background:CARD,border:"1px solid "+LINE,borderRadius:16,padding:"18px 20px",boxShadow:SHADOW_XS,marginBottom:16,display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}}>
                   <div><div style={{fontSize:15,fontWeight:600,letterSpacing:"-0.01em"}}>Réviser mes erreurs</div><div style={{fontSize:13,color:GREY,marginTop:2}}>{struggling} question{struggling>1?"s":""} à revoir</div></div>
                   <ChevronRight size={19} style={{color:BLUE}}/>
                 </div>
