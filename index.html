@@ -2730,6 +2730,13 @@ function App(){
   if(phase==="home"){
     const mastered=stats.masteredIds.length, struggling=stats.strugglingIds.length;
     const pct=stats.lifetimeAnswered>0?Math.round((stats.lifetimeCorrect/stats.lifetimeAnswered)*100):0;
+    // Resumable (non-review) session, surfaced as an explicit card in Pratique
+    // so continuing is a first-class option, not only the hero button.
+    const savedSession = hasSession ? (loadProgress()||{}).session : null;
+    const MODE_LABELS = { all:"Entraînement complet", grammar:"Structure de la langue", reading:"Compréhension écrite", random20:"Série de 20", rapid:"Mode rapide", level:"Par niveau", plan:"Séance du plan", aibank:"Questions IA" };
+    const resumable = (savedSession && Array.isArray(savedSession.order) && savedSession.order.length && savedSession.current < savedSession.order.length && !isReviewMode(savedSession.mode))
+      ? { label: MODE_LABELS[savedSession.mode]||"Séance", current: savedSession.current, total: savedSession.order.length }
+      : null;
 
     // One obvious primary action, chosen by what's most relevant right now:
     // an in-progress session beats today's plan slice beats a cold start.
@@ -2807,6 +2814,21 @@ function App(){
 
               {/* Pratique */}
               <SectionLabel icon={BookIcon}>Pratique</SectionLabel>
+              {resumable&&(
+                <div className="fade hcard" onClick={resumeSession} role="button" tabIndex={0} onKeyDown={e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); resumeSession(); } }} style={{background:CARD,border:"1px solid "+BLUE,borderRadius:16,padding:"16px 18px",boxShadow:SHADOW_XS,marginBottom:12,cursor:"pointer"}}>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
+                    <div style={{display:"flex",alignItems:"center",gap:12,minWidth:0}}>
+                      <div style={{width:36,height:36,borderRadius:10,background:QUOTE_BG,color:BLUE,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><RefreshIcon size={18}/></div>
+                      <div style={{minWidth:0}}>
+                        <div style={{fontSize:15,fontWeight:600,letterSpacing:"-0.01em",color:INK}}>Reprendre ma séance</div>
+                        <div style={{fontSize:13,color:GREY,marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{resumable.label} · {resumable.current+1}/{resumable.total}</div>
+                      </div>
+                    </div>
+                    <ChevronRight size={19} style={{color:BLUE,flexShrink:0}}/>
+                  </div>
+                  <div style={{height:5,background:TRACK_BG,borderRadius:3,overflow:"hidden",marginTop:12}}><div style={{height:"100%",width:`${Math.round(resumable.current/resumable.total*100)}%`,background:BLUE,borderRadius:3,transition:"width .4s"}}/></div>
+                </div>
+              )}
               <div className="fade" style={{display:"flex",gap:12,marginBottom:16,flexWrap:"wrap"}}>
                 <button className="hcard" onClick={()=>start("all","grammar")} style={{flex:"1 1 30%",minWidth:140,background:CARD,border:"1px solid "+LINE,borderRadius:16,padding:"18px 16px",textAlign:"left",boxShadow:SHADOW_XS}}>
                   <div style={{width:32,height:32,borderRadius:9,background:QUOTE_BG,color:BLUE,display:"flex",alignItems:"center",justifyContent:"center",marginBottom:11}}><TypeIcon size={17}/></div>
