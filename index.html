@@ -37,6 +37,7 @@
     --shadow-bubble-user:0 2px 10px rgba(0,113,227,.22);
     --shadow-bubble-ai:0 1px 6px rgba(0,0,0,0.06);
     --ink-soft:#515154;
+    --evidence-bg:rgba(255,196,0,0.32); --evidence-border:#b8860b;
     --radius:18px;
     --level-a1-text:#0a7d33; --level-a1-bg:#eafaef;
     --level-a2-text:#3d8a2e; --level-a2-bg:#f0f8ea;
@@ -66,6 +67,7 @@
     --shadow-bubble-user:0 2px 10px rgba(10,132,255,.28);
     --shadow-bubble-ai:0 1px 6px rgba(0,0,0,0.28);
     --ink-soft:#c7c7cc;
+    --evidence-bg:rgba(255,214,10,0.28); --evidence-border:#ffd60a;
     --level-a1-text:#4ade7a; --level-a1-bg:rgba(48,209,88,0.14);
     --level-a2-text:#8ee06a; --level-a2-bg:rgba(142,224,106,0.14);
     --level-b1-text:#ffd60a; --level-b1-bg:rgba(255,214,10,0.14);
@@ -1543,6 +1545,7 @@ const AMBER_BG = "var(--amber-bg)", AMBER_TEXT = "var(--amber-text)";
 const QUOTE_BG = "var(--quote-bg)", QUOTE_TEXT = "var(--quote-text)";
 const CODE_BG = "var(--code-bg)";
 const TRACK_BG = "var(--track)";
+const EVIDENCE_BG = "var(--evidence-bg)", EVIDENCE_BORDER = "var(--evidence-border)";
 const GRADIENT_BRAND = "var(--gradient-brand)";
 const OVERLAY = "var(--overlay)", OVERLAY_SOLID = "var(--overlay-solid)";
 const SHADOW_XS = "var(--shadow-xs)";
@@ -1652,6 +1655,68 @@ async function askClaude(system, messages, maxTokens){
   return data.text;
 }
 
+// ===== Explain+ (structured reading-comprehension coaching) =====
+// The model is asked for JSON matching this shape. sanitizeExplainPlus
+// rejects anything malformed or missing its core teaching fields outright
+// rather than rendering it half-broken — the caller falls back to a plain
+// message when this returns null.
+const EXPLAIN_PLUS_SYSTEM = [
+  "Tu es un coach de compréhension écrite pour le TCF. Ton but est d'apprendre à l'élève à PROUVER une réponse à partir du texte fourni, pas seulement de lui donner la bonne réponse.",
+  "RÈGLES STRICTES :",
+  "- Réponds UNIQUEMENT avec un objet JSON valide : aucun texte avant ou après, aucun markdown, aucun bloc de code, aucune balise ```.",
+  "- N'utilise jamais de markdown à l'intérieur des valeurs (pas de **, pas de #, pas de listes à puces).",
+  "- Sois concis : des phrases courtes, jamais de dissertation.",
+  "- Chaque citation du champ \"evidence\" doit être recopiée EXACTEMENT depuis le texte fourni (mêmes mots, ponctuation, accents). N'invente jamais une citation et ne cite jamais un passage qui n'existe pas dans le texte.",
+  "- Si la réponse demande de combiner plusieurs éléments du texte plutôt qu'une phrase unique explicite, mets \"reasoningType\" à \"inference\" et donne une entrée \"evidence\" par élément combiné. Sinon mets \"reasoningType\" à \"direct\".",
+  "- Explique le malentendu précis de l'élève dans \"whyYourAnswerIsWrong\" (pas une remarque générique).",
+  "- Quand c'est pertinent, précise dans \"classification.skill\" si l'information relève du fait, de l'opinion, de la description, de la critique, de la cause, de la conséquence, du but ou de l'inférence.",
+  "- Identifie un piège TCF réutilisable dans \"trap\" (label court + explication).",
+  "- Donne 1 à 3 conseils de stratégie d'examen réutilisables dans \"strategy\".",
+  "- Ne liste dans \"vocabulary\" que du vocabulaire réellement difficile (0 à 4 mots). Un tableau vide est préférable à des mots triviaux.",
+  "- \"memoryTip\" doit être UNE SEULE phrase concise.",
+  "Réponds avec exactement cette forme JSON :",
+  '{"reasoningType":"direct","evidence":[{"quote":"...","explanation":"..."}],"correctionSummary":"...","whyYourAnswerIsWrong":"...","trap":{"label":"...","explanation":"..."},"strategy":["..."],"vocabulary":[{"term":"...","definitionFr":"...","translationEn":"...","example":"..."}],"memoryTip":"...","classification":{"skill":"...","difficulty":"B2","mistakeType":"..."}}',
+].join("\n");
+
+function sanitizeExplainPlus(raw){
+  let obj;
+  try{
+    const cleaned=String(raw).replace(/```json/gi,"").replace(/```/g,"").trim();
+    obj=JSON.parse(cleaned);
+  }catch(e){ return null; }
+  if(!obj||typeof obj!=="object") return null;
+
+  const evidence=Array.isArray(obj.evidence)
+    ? obj.evidence.filter(e=>e&&typeof e.quote==="string"&&e.quote.trim()&&typeof e.explanation==="string").map(e=>({quote:e.quote.trim(),explanation:e.explanation.trim()}))
+    : [];
+  const correctionSummary=typeof obj.correctionSummary==="string"?obj.correctionSummary.trim():"";
+  const whyYourAnswerIsWrong=typeof obj.whyYourAnswerIsWrong==="string"?obj.whyYourAnswerIsWrong.trim():"";
+
+  // These three are the actual teaching content — without them there's
+  // nothing worth showing, so the whole response is treated as unusable.
+  if(evidence.length===0||!correctionSummary||!whyYourAnswerIsWrong) return null;
+
+  const trap=(obj.trap&&typeof obj.trap.label==="string"&&obj.trap.label.trim())?{label:obj.trap.label.trim(),explanation:typeof obj.trap.explanation==="string"?obj.trap.explanation.trim():""}:null;
+  const strategy=Array.isArray(obj.strategy)?obj.strategy.filter(s=>typeof s==="string"&&s.trim()).map(s=>s.trim()).slice(0,4):[];
+  const vocabulary=Array.isArray(obj.vocabulary)
+    ? obj.vocabulary.filter(v=>v&&typeof v.term==="string"&&v.term.trim()).map(v=>({
+        term:v.term.trim(),
+        definitionFr:typeof v.definitionFr==="string"?v.definitionFr.trim():"",
+        translationEn:typeof v.translationEn==="string"?v.translationEn.trim():"",
+        example:typeof v.example==="string"?v.example.trim():"",
+      })).slice(0,6)
+    : [];
+  const memoryTip=typeof obj.memoryTip==="string"?obj.memoryTip.trim():"";
+  const classification=(obj.classification&&typeof obj.classification==="object")?{
+    skill:typeof obj.classification.skill==="string"?obj.classification.skill.trim():"",
+    difficulty:typeof obj.classification.difficulty==="string"?obj.classification.difficulty.trim():"",
+    mistakeType:typeof obj.classification.mistakeType==="string"?obj.classification.mistakeType.trim():"",
+  }:{skill:"",difficulty:"",mistakeType:""};
+  const reasoningType=obj.reasoningType==="inference"?"inference":"direct";
+
+  return { reasoningType, evidence, correctionSummary, whyYourAnswerIsWrong, trap, strategy, vocabulary, memoryTip, classification };
+}
+
 function Spinner(){ return <span className="spin">◠</span>; }
 
 // ===== Icon set (feather-style, single stroke, 1.5–2px) =====
@@ -1718,6 +1783,144 @@ function RichText({ text }){
         }
         return <div key={i} style={{marginBottom:6}}>{inline(t,"l"+i)}</div>;
       })}
+    </div>
+  );
+}
+
+// Highlights AI-supplied evidence quotes inside a passage, without ever
+// touching the original question data or using dangerouslySetInnerHTML.
+// Matching is exact (case, punctuation and accents included) — a quote
+// that isn't found verbatim in the passage is simply left unhighlighted;
+// it still appears in the evidence list itself. Repeated identical text is
+// handled deterministically: every exact occurrence of a matched quote is
+// highlighted, and overlapping ranges keep whichever was found first.
+function highlightPassage(passage, quotes){
+  const text=String(passage||"");
+  const cleanQuotes=(quotes||[]).map(q=>String(q||"").trim()).filter(Boolean);
+  if(cleanQuotes.length===0) return [text];
+
+  const ranges=[];
+  cleanQuotes.forEach(quote=>{
+    let from=0;
+    while(from<=text.length){
+      const at=text.indexOf(quote,from);
+      if(at===-1) break;
+      ranges.push({start:at,end:at+quote.length});
+      from=at+quote.length;
+    }
+  });
+  if(ranges.length===0) return [text];
+
+  ranges.sort((a,b)=>a.start-b.start||a.end-b.end);
+  const accepted=[];
+  let cursor=0;
+  for(const r of ranges){
+    if(r.start<cursor) continue; // overlaps an earlier, already-accepted range
+    accepted.push(r);
+    cursor=r.end;
+  }
+
+  const out=[];
+  let pos=0;
+  accepted.forEach((r,i)=>{
+    if(r.start>pos) out.push(text.slice(pos,r.start));
+    out.push(
+      <mark key={"ev"+i} style={{background:EVIDENCE_BG,color:"inherit",borderRadius:3,padding:"0 1px",boxDecorationBreak:"clone",WebkitBoxDecorationBreak:"clone",borderBottom:"2px solid "+EVIDENCE_BORDER}}>
+        {text.slice(r.start,r.end)}
+      </mark>
+    );
+    pos=r.end;
+  });
+  if(pos<text.length) out.push(text.slice(pos));
+  return out;
+}
+
+// Structured "Explain+" result for reading questions: the correct answer
+// and its textual evidence are always visible (never hidden behind a
+// disclosure); the trap/strategy/vocabulary/classification enrichment is
+// real teaching content but secondary, so it lives behind one native
+// <details> — keyboard accessible for free, same pattern already used for
+// Settings' "Avancé" panel.
+function ExplainPlusPanel({ data, q, selected }){
+  const selectedText=q.options[selected];
+  const hasEnrichment = !!data.trap || data.strategy.length>0 || data.vocabulary.length>0 || !!(data.classification.skill||data.classification.difficulty||data.classification.mistakeType);
+  const h4Style={fontSize:12.5,fontWeight:700,color:GREY,textTransform:"uppercase",letterSpacing:"0.05em",margin:"0 0 8px"};
+  return (
+    <div style={{marginTop:6}}>
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}>
+        <SparkleIcon size={14} style={{color:BLUE}}/>
+        <span style={{fontSize:12,fontWeight:700,color:BLUE,textTransform:"uppercase",letterSpacing:"0.05em"}}>Explication détaillée</span>
+        {data.reasoningType==="inference"&&<span style={{fontSize:11,fontWeight:600,color:AMBER_TEXT,background:AMBER_BG,padding:"2px 8px",borderRadius:6}}>Déduction</span>}
+      </div>
+
+      <h4 style={h4Style}>Preuve dans le texte</h4>
+      <div style={{display:"flex",flexDirection:"column",gap:9,marginBottom:18}}>
+        {data.evidence.map((e,i)=>(
+          <div key={i} style={{background:CARD,border:"1px solid "+LINE,borderRadius:12,padding:"12px 14px"}}>
+            <div style={{fontSize:14.5,lineHeight:1.5,color:INK,fontStyle:"italic",marginBottom:e.explanation?6:0}}>« {e.quote} »</div>
+            {e.explanation&&<div style={{fontSize:13.5,lineHeight:1.5,color:INK_SOFT}}>{e.explanation}</div>}
+          </div>
+        ))}
+      </div>
+
+      <h4 style={h4Style}>Pourquoi c'est la bonne réponse</h4>
+      <p style={{fontSize:14.5,lineHeight:1.6,color:INK,margin:"0 0 18px"}}>{data.correctionSummary}</p>
+
+      <h4 style={h4Style}>Pourquoi ta réponse était fausse</h4>
+      <p style={{fontSize:14.5,lineHeight:1.6,color:INK,margin:"0 0 16px"}}><strong style={{fontWeight:600,color:RED_TEXT}}>{selectedText}</strong> — {data.whyYourAnswerIsWrong}</p>
+
+      {data.memoryTip&&(
+        <div style={{display:"flex",gap:9,alignItems:"flex-start",background:QUOTE_BG,borderRadius:12,padding:"12px 14px",marginBottom:hasEnrichment?14:0}}>
+          <span aria-hidden="true" style={{flexShrink:0}}>💡</span>
+          <span style={{fontSize:13.5,lineHeight:1.5,color:QUOTE_TEXT,fontWeight:500}}>{data.memoryTip}</span>
+        </div>
+      )}
+
+      {hasEnrichment&&(
+        <details>
+          <summary style={{fontSize:13.5,color:GREY,cursor:"pointer",padding:"6px 2px",listStyle:"none",display:"flex",alignItems:"center",gap:6}}>
+            <GearIcon size={13}/>Piège, stratégie et vocabulaire
+          </summary>
+          <div style={{marginTop:10,display:"flex",flexDirection:"column",gap:16}}>
+            {data.trap&&(
+              <div>
+                <h4 style={h4Style}>Piège TCF{data.trap.label?" — "+data.trap.label:""}</h4>
+                {data.trap.explanation&&<p style={{fontSize:13.5,lineHeight:1.55,color:INK_SOFT,margin:0}}>{data.trap.explanation}</p>}
+              </div>
+            )}
+            {data.strategy.length>0&&(
+              <div>
+                <h4 style={h4Style}>Stratégie d'examen</h4>
+                <ul style={{margin:0,paddingLeft:20,display:"flex",flexDirection:"column",gap:5}}>
+                  {data.strategy.map((s,i)=><li key={i} style={{fontSize:13.5,lineHeight:1.5,color:INK_SOFT}}>{s}</li>)}
+                </ul>
+              </div>
+            )}
+            {data.vocabulary.length>0&&(
+              <div>
+                <h4 style={h4Style}>Vocabulaire</h4>
+                <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                  {data.vocabulary.map((v,i)=>(
+                    <div key={i} style={{fontSize:13.5,lineHeight:1.5}}>
+                      <strong style={{color:INK,fontWeight:600}}>{v.term}</strong>
+                      {v.translationEn&&<span style={{color:GREY}}> ({v.translationEn})</span>}
+                      {v.definitionFr&&<div style={{color:INK_SOFT,marginTop:2}}>{v.definitionFr}</div>}
+                      {v.example&&<div style={{color:GREY,fontStyle:"italic",marginTop:2}}>« {v.example} »</div>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {(data.classification.skill||data.classification.difficulty||data.classification.mistakeType)&&(
+              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                {data.classification.skill&&<span style={{fontSize:11.5,fontWeight:600,color:GREY,background:TRACK_BG,padding:"3px 9px",borderRadius:6}}>{data.classification.skill}</span>}
+                {data.classification.difficulty&&<span style={{fontSize:11.5,fontWeight:600,color:GREY,background:TRACK_BG,padding:"3px 9px",borderRadius:6}}>{data.classification.difficulty}</span>}
+                {data.classification.mistakeType&&<span style={{fontSize:11.5,fontWeight:600,color:GREY,background:TRACK_BG,padding:"3px 9px",borderRadius:6}}>{data.classification.mistakeType}</span>}
+              </div>
+            )}
+          </div>
+        </details>
+      )}
     </div>
   );
 }
@@ -1800,7 +2003,12 @@ function App(){
   const [aiLoading,setAiLoading]=useState(false);
   const [aiError,setAiError]=useState("");
   const [deepExpl,setDeepExpl]=useState("");
+  const [deepExplStructured,setDeepExplStructured]=useState(null);
   const [deepLoading,setDeepLoading]=useState(false);
+  // Every place that resets the free-text deep explanation must also clear
+  // the structured one, or a stale evidence panel (with quotes from a
+  // different passage) could bleed into the next question.
+  const resetDeepExpl=useCallback(()=>{ setDeepExpl(""); setDeepExplStructured(null); },[]);
   const [workerUrlInput,setWorkerUrlInput]=useState(isCustomWorker()?getWorkerUrl():"");
   const [showTutor,setShowTutor]=useState(false);
   const [showSettings,setShowSettings]=useState(false);
@@ -1868,7 +2076,7 @@ function App(){
   const startPlanSession=()=>{
     if(!plan||planDueIds.length===0) return;
     const pool=planDueIds.map(id=>ALL[id]).filter(Boolean);
-    setMode("plan"); setQuestions(pool); setCurrent(0); setSelected(null); setScore(0); setWrong([]); setDeepExpl(""); setAiQuestion(null); setPhase("quiz"); setHasSession(true);
+    setMode("plan"); setQuestions(pool); setCurrent(0); setSelected(null); setScore(0); setWrong([]); resetDeepExpl(); setAiQuestion(null); setPhase("quiz"); setHasSession(true);
     saveProgress({stats,session:{order:pool.map(x=>x.id),current:0,score:0,wrong:[],mode:"plan"}});
   };
   const markPlanDone=(id)=>{
@@ -1878,8 +2086,8 @@ function App(){
   };
   const persist=(ns,session)=>saveProgress({stats:ns,session:session||null});
   const findById=(id)=>{ const fromAll=(typeof id==="number")?ALL[id]:undefined; return fromAll!==undefined?fromAll:aiBank.find(a=>a.id===id); };
-  const resumeSession=()=>{ const s=loadProgress(); if(s&&s.session){ const x=s.session; const qs=x.order.map(findById).filter(Boolean); setQuestions(qs); setCurrent(x.current); setScore(x.score); setWrong(x.wrong||[]); setMode(x.mode||"all"); setSelected(null); setDeepExpl(""); setPhase("quiz"); } };
-  const startAIBank=()=>{ if(aiBank.length===0) return; setMode("aibank"); const pool=shuffle(aiBank); setQuestions(pool); setCurrent(0); setSelected(null); setScore(0); setWrong([]); setDeepExpl(""); setAiQuestion(null); setPhase("quiz"); setHasSession(true); saveProgress({stats,session:{order:pool.map(x=>x.id),current:0,score:0,wrong:[],mode:"aibank"}}); };
+  const resumeSession=()=>{ const s=loadProgress(); if(s&&s.session){ const x=s.session; const qs=x.order.map(findById).filter(Boolean); setQuestions(qs); setCurrent(x.current); setScore(x.score); setWrong(x.wrong||[]); setMode(x.mode||"all"); setSelected(null); resetDeepExpl(); setPhase("quiz"); } };
+  const startAIBank=()=>{ if(aiBank.length===0) return; setMode("aibank"); const pool=shuffle(aiBank); setQuestions(pool); setCurrent(0); setSelected(null); setScore(0); setWrong([]); resetDeepExpl(); setAiQuestion(null); setPhase("quiz"); setHasSession(true); saveProgress({stats,session:{order:pool.map(x=>x.id),current:0,score:0,wrong:[],mode:"aibank"}}); };
   const start=(m,cat="all",lvl="all")=>{
     setMode(m);
     let pool;
@@ -1893,7 +2101,7 @@ function App(){
       const base=cat==="all"?ALL:ALL.filter(x=>x.type===cat);
       pool=m==="random20"?shuffle(base).slice(0,20):shuffle(base);
     }
-    setQuestions(pool); setCurrent(0); setSelected(null); setScore(0); setWrong([]); setDeepExpl(""); setAiQuestion(null); setPhase("quiz"); setHasSession(true);
+    setQuestions(pool); setCurrent(0); setSelected(null); setScore(0); setWrong([]); resetDeepExpl(); setAiQuestion(null); setPhase("quiz"); setHasSession(true);
     saveProgress({stats,session:{order:pool.map(q=>q.id),current:0,score:0,wrong:[],mode:m,cat,lvl}});
   };
 
@@ -1904,7 +2112,7 @@ function App(){
 
   function handleSelect(i){
     if(selected!==null) return;
-    setSelected(i); setDeepExpl("");
+    setSelected(i); resetDeepExpl();
     if(aiQuestion) return;
     const correct=i===q.correct;
     markPlanDone(q.id);
@@ -1917,12 +2125,12 @@ function App(){
     setStats(ns); persist(ns,{order:questions.map(x=>x.id),current,score:newScore,wrong:newWrong,mode});
   }
   function next(){
-    setAiQuestion(null); setDeepExpl("");
+    setAiQuestion(null); resetDeepExpl();
     if(current+1>=total){ const pct=Math.round((score/total)*100); const fs={...stats,sessions:stats.sessions+1,bestPct:Math.max(stats.bestPct,pct)}; setStats(fs); persist(fs,null); setHasSession(false); setPhase("result"); }
     else { const nc=current+1; setCurrent(nc); setSelected(null); persist(stats,{order:questions.map(x=>x.id),current:nc,score,wrong,mode}); }
   }
   async function generateAIQuestion(){
-    setAiLoading(true); setSelected(null); setDeepExpl(""); setAiError(""); setAiQuestion(null);
+    setAiLoading(true); setSelected(null); resetDeepExpl(); setAiError(""); setAiQuestion(null);
     try{
       const topic=pickGrammarTopic();
       const context=AI_CONTEXTS[Math.floor(Math.random()*AI_CONTEXTS.length)];
@@ -1938,12 +2146,19 @@ function App(){
   }
   async function explainDeeper(){
     setDeepLoading(true);
+    resetDeepExpl();
     try{
-      const ctx = q.type==="reading"
-        ? `Texte : "${q.passage}"\nQuestion : "${q.question}"\nBonne réponse : "${q.options[q.correct]}"\nMa réponse : "${q.options[selected]}".\nExplique pourquoi la bonne réponse est correcte et pourquoi la mienne est fausse, en t\u2019appuyant sur le texte.`
-        : `Phrase: "${q.sentence}"\nBonne réponse: "${q.options[q.correct]}"\nJ\u2019ai répondu: "${q.options[selected]}".\nExplique la règle, pourquoi c\u2019est faux, et donne un autre exemple.`;
-      const txt=await askClaude("Tu es un professeur de français bienveillant (TCF B2). Explique clairement, en 4-6 phrases. Mets les termes clés en **gras**. Pas de titres markdown (pas de #), pas de listes numérotées inutiles — un paragraphe court suffit.",[{role:"user",content:ctx}],500);
-      setDeepExpl(txt);
+      if(q.type==="reading"){
+        const ctx=`Texte : "${q.passage}"\nQuestion : "${q.question}"\nBonne réponse : "${q.options[q.correct]}"\nMa réponse (incorrecte) : "${q.options[selected]}".\nAnalyse cette réponse selon les règles ci-dessus.`;
+        const txt=await askClaude(EXPLAIN_PLUS_SYSTEM,[{role:"user",content:ctx}],900);
+        const parsed=sanitizeExplainPlus(txt);
+        if(parsed) setDeepExplStructured(parsed);
+        else setDeepExpl("Explication indisponible pour le moment. Réessaie dans un instant.");
+      } else {
+        const ctx=`Phrase: "${q.sentence}"\nBonne réponse: "${q.options[q.correct]}"\nJ\u2019ai répondu: "${q.options[selected]}".\nExplique la règle, pourquoi c\u2019est faux, et donne un autre exemple.`;
+        const txt=await askClaude("Tu es un professeur de français bienveillant (TCF B2). Explique clairement, en 4-6 phrases. Mets les termes clés en **gras**. Pas de titres markdown (pas de #), pas de listes numérotées inutiles — un paragraphe court suffit.",[{role:"user",content:ctx}],500);
+        setDeepExpl(txt);
+      }
     }catch(e){ setDeepExpl(e.message==="NO_WORKER"?"Configure d'abord ton serveur IA (Réglages).":"Erreur : "+e.message); }
     setDeepLoading(false);
   }
@@ -1962,7 +2177,11 @@ function App(){
       if(selected===null){
         const idx="1234ABCDabcd".indexOf(e.key)%4;
         if(idx>=0&&idx<q.options.length&&"1234ABCDabcd".includes(e.key)) handleSelect(idx);
-      } else if(e.key==="Enter"||e.key===" "){
+      } else if((e.key==="Enter"||e.key===" ")&&!["BUTTON","A","SUMMARY"].includes(e.target&&e.target.tagName)){
+        // Buttons/links/<summary> already activate on Enter/Space on their
+        // own — advancing the quiz here too would double-fire (e.g. tabbing
+        // to "Explique-moi plus" or a collapsible section and pressing
+        // Enter would open it AND immediately skip the question).
         e.preventDefault();
         if(aiQuestion) { setAiQuestion(null); setSelected(null); setPhase("home"); }
         else next();
@@ -2437,7 +2656,7 @@ function App(){
             </div>
             {q.type==="reading"
               ? <>
-                  <div style={{background:CARD,border:"1px solid "+LINE,borderRadius:RADIUS,padding:"20px 22px",maxHeight:"42vh",overflowY:"auto",fontSize:16,lineHeight:1.7,color:INK_SOFT,letterSpacing:"-0.01em",whiteSpace:"pre-line",WebkitOverflowScrolling:"touch"}}>{q.passage}</div>
+                  <div style={{background:CARD,border:"1px solid "+LINE,borderRadius:RADIUS,padding:"20px 22px",maxHeight:"42vh",overflowY:"auto",fontSize:16,lineHeight:1.7,color:INK_SOFT,letterSpacing:"-0.01em",whiteSpace:"pre-line",WebkitOverflowScrolling:"touch"}}>{deepExplStructured?highlightPassage(q.passage,deepExplStructured.evidence.map(e=>e.quote)):q.passage}</div>
                   <div style={{fontSize:22,lineHeight:1.4,fontWeight:600,letterSpacing:"-0.02em",textAlign:"center",color:INK,marginTop:24}}>{q.question}</div>
                 </>
               : <div style={{fontSize:27,lineHeight:1.48,fontWeight:500,letterSpacing:"-0.02em",textAlign:"center",color:INK}}>{renderSentence(q.sentence)}</div>}
@@ -2464,8 +2683,9 @@ function App(){
               <div style={{fontSize:16,lineHeight:1.6,color:INK,marginBottom:isWrong?16:0,letterSpacing:"-0.01em"}}><strong style={{fontWeight:600}}>« {q.options[q.correct]} »</strong> — {q.rule}</div>
               {isWrong&&q.why&&(<div style={{display:"flex",flexDirection:"column",gap:9,borderTop:"1px solid "+LINE,paddingTop:16}}>{q.options.map((opt,i)=>{ if(i===q.correct||!q.why[i]) return null; return (<div key={i} style={{fontSize:14.5,lineHeight:1.55,color:INK_SOFT}}><span style={{color:RED,fontWeight:600}}>{opt}</span> — {q.why[i]}</div>); })}</div>)}
               {isWrong&&(<div style={{marginTop:16}}>
-                {!deepExpl&&<PillButton kind="secondary" onClick={explainDeeper} disabled={deepLoading} style={{fontSize:14,padding:"10px 18px"}}>{deepLoading?<><Spinner/> Analyse…</>:"Explique-moi plus"}</PillButton>}
-                {deepExpl&&<div className="fade" style={{marginTop:6,background:BG,borderRadius:12,padding:16,fontSize:15,lineHeight:1.6,color:INK}}><RichText text={deepExpl}/></div>}
+                {!deepExpl&&!deepExplStructured&&<PillButton kind="secondary" onClick={explainDeeper} disabled={deepLoading} style={{fontSize:14,padding:"10px 18px"}}>{deepLoading?<><Spinner/> Analyse…</>:"Explique-moi plus"}</PillButton>}
+                {deepExplStructured&&<div className="fade"><ExplainPlusPanel data={deepExplStructured} q={q} selected={selected}/></div>}
+                {!deepExplStructured&&deepExpl&&<div className="fade" style={{marginTop:6,background:BG,borderRadius:12,padding:16,fontSize:15,lineHeight:1.6,color:INK}}><RichText text={deepExpl}/></div>}
               </div>)}
             </div>
           )}
