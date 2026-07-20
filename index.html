@@ -1828,7 +1828,10 @@ function sanitizeExplainPlus(raw){
   let obj;
   try{
     const cleaned=String(raw).replace(/```json/gi,"").replace(/```/g,"").trim();
-    obj=JSON.parse(cleaned);
+    // Tolerate stray prose around the JSON by extracting the outermost object.
+    const start=cleaned.indexOf("{"), end=cleaned.lastIndexOf("}");
+    const jsonStr=(start>=0&&end>start)?cleaned.slice(start,end+1):cleaned;
+    obj=JSON.parse(jsonStr);
   }catch(e){ return null; }
   if(!obj||typeof obj!=="object") return null;
 
@@ -2436,10 +2439,22 @@ function App(){
     try{
       if(q.type==="reading"){
         const ctx=`Texte : "${q.passage}"\nQuestion : "${q.question}"\nBonne réponse : "${q.options[q.correct]}"\nMa réponse (incorrecte) : "${q.options[selected]}".\nAnalyse cette réponse selon les règles ci-dessus.`;
-        const txt=await askClaude(EXPLAIN_PLUS_SYSTEM,[{role:"user",content:ctx}],900);
-        const parsed=sanitizeExplainPlus(txt);
+        // The structured JSON occasionally comes back malformed or truncated.
+        // Give it a couple of tries, then fall back to a plain explanation so
+        // the user always gets help instead of an error.
+        let parsed=null;
+        for(let attempt=0; attempt<3 && !parsed; attempt++){
+          let txt;
+          try{ txt=await askClaude(EXPLAIN_PLUS_SYSTEM,[{role:"user",content:ctx}],1300); }
+          catch(e){ if(attempt===2) throw e; continue; }
+          parsed=sanitizeExplainPlus(txt);
+        }
         if(parsed) setDeepExplStructured(parsed);
-        else setDeepExpl("Explication indisponible pour le moment. Réessaie dans un instant.");
+        else {
+          const fctx=`Texte : "${q.passage}"\nQuestion : "${q.question}"\nBonne réponse : "${q.options[q.correct]}"\nMa réponse (incorrecte) : "${q.options[selected]}".\nEn t'appuyant sur le texte, explique pourquoi la bonne réponse est correcte et pourquoi la mienne est fausse.`;
+          const txt=await askClaude("Tu es un professeur de compréhension écrite (TCF B2) bienveillant. Explique clairement en 4-6 phrases, en citant le texte entre « guillemets ». Mets les termes clés en **gras**. Pas de titres markdown (pas de #).",[{role:"user",content:fctx}],650);
+          setDeepExpl(txt);
+        }
       } else {
         const ctx=`Phrase: "${q.sentence}"\nBonne réponse: "${q.options[q.correct]}"\nJ\u2019ai répondu: "${q.options[selected]}".\nExplique la règle, pourquoi c\u2019est faux, et donne un autre exemple.`;
         const txt=await askClaude("Tu es un professeur de français bienveillant (TCF B2). Explique clairement, en 4-6 phrases. Mets les termes clés en **gras**. Pas de titres markdown (pas de #), pas de listes numérotées inutiles — un paragraphe court suffit.",[{role:"user",content:ctx}],500);
