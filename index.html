@@ -1592,6 +1592,61 @@ function planView(plan){
     nextAssigned, nextQueue, pct, avgPerDay, endKey, days, unansweredIds };
 }
 
+// ===== Study companion: skill classification + spaced review =====
+// Grammar questions are mapped to a B2 "pattern" (skill) read-only, from the
+// rule text and — more reliably — the shape of the options (a set of
+// prepositions, pronouns, connectors…). This never edits the question bank.
+const _acc = s => String(s==null?"":s).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"");
+const PREP_SET = new Set("a,au,aux,en,du,de,des,dans,sur,sous,par,pour,avec,chez,vers,entre,contre,sans,selon,malgre,jusqu'a".split(","));
+const CONN_SET = new Set("mais,donc,car,or,cependant,pourtant,neanmoins,toutefois,alors,puisque,comme,afin,tandis,quoique,neanmoins".split(","));
+const RELP_SET = new Set("qui,que,dont,ou,lequel,laquelle,lesquels,lesquelles,auquel,duquel,quoi".split(","));
+const OBJP_SET = new Set("le,la,les,lui,leur,l',en,y,me,te,se,nous,vous".split(","));
+const GRAMMAR_SKILL_RULES = [
+  ["subjunctive","Subjonctif",/subjonctif/],
+  ["conditional","Conditionnel & hypothèse",/conditionnel|hypoth[eè]se|regret|\bsi\b.{0,30}(imparfait|plus-que-parfait)/],
+  ["past-agreement","Accord du participe passé",/accord du participe|participe pass[ée].{0,20}accord|s'accorde avec/],
+  ["reported-speech","Discours rapporté",/discours (rapporte|indirect)|style indirect/],
+  ["gerund","Gérondif & participe présent",/gerondif|participe present/],
+  ["passive","Voix passive & impersonnel",/voix passive|\bpassif\b|tournure impersonnelle/],
+  ["comparatives","Comparatifs & superlatifs",/comparatif|superlatif|\bmeilleur|\bmieux\b/],
+  ["negation","Négation & restriction",/negation|restriction|ne\b.{0,8}\b(que|guere|aucun|jamais|personne|rien|plus|nul)\b|\bni\b.{0,6}\bni\b/],
+  ["future","Futur",/futur (simple|anterieur|proche)/],
+  ["time-expressions","Expressions de temps",/\bdepuis\b|\bil y a\b|\bpendant\b|duree|expression de temps/],
+  ["tenses","Temps du passé",/imparfait|passe compose|plus-que-parfait|passe simple|anteriorit/],
+];
+function classifyGrammarSkill(q){
+  const hay=_acc((q.rule||"")+" "+(q.sentence||""));
+  for(const [key,label,re] of GRAMMAR_SKILL_RULES){ if(re.test(hay)) return {key,label}; }
+  const o=(q.options||[]).map(x=>_acc(x).replace(/[.!?]/g,"").trim());
+  const allIn=set=>o.length>=3&&o.every(x=>set.has(x));
+  if(allIn(RELP_SET)&&o.some(x=>["dont","lequel","laquelle","ou","auquel","duquel"].includes(x))) return {key:"relative-pronouns",label:"Pronoms relatifs"};
+  if(allIn(OBJP_SET)) return {key:"object-pronouns",label:"Pronoms compléments"};
+  if(allIn(RELP_SET)) return {key:"relative-pronouns",label:"Pronoms relatifs"};
+  if(allIn(CONN_SET)) return {key:"connectors",label:"Connecteurs logiques"};
+  if(allIn(PREP_SET)) return {key:"prepositions",label:"Prépositions"};
+  const r=_acc(q.rule||"");
+  if(/connecteur|consequence|opposition|concession|\bbien que\b|\bcependant\b|\bgrace a\b|\bdu coup\b/.test(r)) return {key:"connectors",label:"Connecteurs logiques"};
+  if(/pronom relatif|\bdont\b|\blequel\b/.test(r)) return {key:"relative-pronouns",label:"Pronoms relatifs"};
+  if(/pronom|\bcod\b|\bcoi\b|remplace/.test(r)) return {key:"object-pronouns",label:"Pronoms compléments"};
+  if(/preposition|pays|ville|\bau\b|\ben\b/.test(r)) return {key:"prepositions",label:"Prépositions"};
+  if(/article|partitif/.test(r)) return {key:"articles",label:"Articles"};
+  if(/synonyme|paronyme|collocation|mot juste|expression|\bsens\b|signifie|nuance/.test(r)) return {key:"vocabulary",label:"Vocabulaire en contexte"};
+  if(/verbe|infinitif|conjug/.test(r)) return {key:"verb-forms",label:"Conjugaison & verbes"};
+  return {key:"other",label:"Vocabulaire & tournures"};
+}
+
+// Spaced review (Leitner-style). Each answered question is scheduled for its
+// next review; correct answers push it to a longer box, a miss resets it.
+const REVIEW_KEY = "tcf_review_v1";
+const REVIEW_INTERVALS = [1,2,4,9,18,35]; // days by box 0..5
+function loadReview(){ try{ const r=localStorage.getItem(REVIEW_KEY); const o=r?JSON.parse(r):{}; return (o&&typeof o==="object"&&!Array.isArray(o))?o:{}; }catch(e){ return {}; } }
+function saveReview(m){ try{ localStorage.setItem(REVIEW_KEY,JSON.stringify(m)); }catch(e){} }
+function nextReviewEntry(prev, correct){
+  const box = correct ? Math.min((prev&&prev.box||0)+1, REVIEW_INTERVALS.length-1) : 0;
+  return { box, due: addDaysKey(todayKey(), REVIEW_INTERVALS[box]) };
+}
+function daysUntilKey(key){ return Math.round((keyToDate(key)-keyToDate(todayKey()))/86400000); }
+
 // Topic pool for AI-generated grammar questions, to force variety instead of
 // letting the model default to its single most likely pattern (in practice,
 // "si" hypothetical clauses, almost every time, if left unconstrained).
@@ -2090,11 +2145,12 @@ function App(){
   const [customDays,setCustomDays]=useState("");
   const [themeMode,setThemeMode]=useState(loadThemePref);
   const [reduceMotion,setReduceMotion]=useState(loadReduceMotion);
+  const [review,setReview]=useState({}); // spaced-review schedule: qid -> {box,due}
   const hasWorker=true; // built-in worker ships with the app
   const mainRef=useRef(null);
   const screenKey=showSettings?"settings":showTutor?"tutor":phase;
 
-  useEffect(()=>{ const s=loadProgress(); if(s){ setStats(s.stats||emptyStats); if(s.session&&s.session.order&&s.session.current<s.session.order.length) setHasSession(true); } setAiBank(loadAiBank()); const rawPlan=loadPlan(); if(rawPlan){ const np=refreshPlanToday(normalizePlan(rawPlan, ALL.map(x=>x.id))); setPlan(np); savePlan(np); } },[]);
+  useEffect(()=>{ const s=loadProgress(); if(s){ setStats(s.stats||emptyStats); if(s.session&&s.session.order&&s.session.current<s.session.order.length) setHasSession(true); } setAiBank(loadAiBank()); setReview(loadReview()); const rawPlan=loadPlan(); if(rawPlan){ const np=refreshPlanToday(normalizePlan(rawPlan, ALL.map(x=>x.id))); setPlan(np); savePlan(np); } },[]);
 
   useEffect(()=>{
     saveReduceMotion(reduceMotion);
@@ -2173,6 +2229,39 @@ function App(){
   const startContinueAhead=()=>{ if(pv) startPool(pv.nextQueue.map(id=>ALL[id]).filter(Boolean),"plan"); };
   const startRevisionSession=()=>{ if(pv) startPool(shuffle(pv.revisionIds).map(id=>ALL[id]).filter(Boolean),"revision"); };
 
+  // Spaced review: schedule each answered question's next review. Additive —
+  // it never affects scoring, only the review calendar shown on the dashboard.
+  const recordReview=(id,correct)=>{
+    if(typeof id!=="number") return;
+    setReview(prev=>{ const np={ ...prev, [id]: nextReviewEntry(prev[id], correct) }; saveReview(np); return np; });
+  };
+
+  // Read-only skill map (grammar patterns), computed once for the bank.
+  const grammarSkillMap = useMemo(()=>{ const m={}; for(const q of ALL){ if(q.type==="grammar") m[q.id]=classifyGrammarSkill(q); } return m; },[]);
+  // The learning-journey dashboard model: skill mastery, weak areas, level
+  // progress and the spaced-review schedule. Derived from existing progress
+  // stats + the review calendar — nothing here changes scoring.
+  const journey = useMemo(()=>{
+    const seen=new Set([...stats.masteredIds, ...stats.strugglingIds]);
+    const masteredSet=new Set(stats.masteredIds);
+    const skills={};
+    for(const q of ALL){ if(q.type!=="grammar") continue; const s=grammarSkillMap[q.id]; const e=skills[s.key]||(skills[s.key]={key:s.key,label:s.label,total:0,seen:0,mastered:0}); e.total++; if(seen.has(q.id)){ e.seen++; if(masteredSet.has(q.id)) e.mastered++; } }
+    const list=Object.values(skills).filter(s=>s.total>0).map(s=>({...s, pct: s.seen?Math.round(s.mastered/s.seen*100):0}));
+    const named=list.filter(s=>s.key!=="other");
+    const weak=named.filter(s=>s.seen>=2 && s.mastered/s.seen<0.6).sort((a,b)=>(a.mastered/a.seen)-(b.mastered/b.seen) || b.seen-a.seen).slice(0,4);
+    const masteredSkills=named.filter(s=>s.seen>=2 && s.mastered/s.seen>=0.8).length;
+    const skillsWithData=named.filter(s=>s.seen>0).length;
+    const levels=["A1","A2","B1","B2","C1","C2"].map(L=>{ let total=0,sn=0,ma=0; for(const q of ALL){ if(q.level!==L) continue; total++; if(seen.has(q.id)){ sn++; if(masteredSet.has(q.id)) ma++; } } return { level:L, total, seen:sn, mastered:ma, pct: sn?Math.round(ma/sn*100):0 }; }).filter(l=>l.total>0);
+    const t=todayKey(); let due=0, nextDue=null;
+    for(const id in review){ const e=review[id]; if(!e||!e.due) continue; if(e.due<=t) due++; else if(!nextDue||e.due<nextDue) nextDue=e.due; }
+    return { seenCount:seen.size, total:ALL.length, mastered:masteredSet.size, struggling:stats.strugglingIds.length,
+      accuracy: stats.lifetimeAnswered>0?Math.round(stats.lifetimeCorrect/stats.lifetimeAnswered*100):0,
+      skillList: named.slice().sort((a,b)=>b.seen-a.seen), weak, masteredSkills, skillsWithData,
+      levels, dueToday:due, nextDue, nextDueIn: nextDue?daysUntilKey(nextDue):null };
+  }, [stats, review, grammarSkillMap]);
+  const dueIds = useMemo(()=>{ const t=todayKey(); return Object.keys(review).filter(id=>review[id]&&review[id].due&&review[id].due<=t).map(Number).filter(id=>Number.isInteger(id)&&ALL[id]); },[review]);
+  const startReviewDue=()=>{ startPool(shuffle(dueIds).map(id=>ALL[id]).filter(Boolean),"reviewdue"); };
+
   // Record an answer against the plan: it counts as done (whether right or
   // wrong — a mistake never adds to the workload) and wrong answers join the
   // optional revision queue until answered correctly. No-op without a plan.
@@ -2224,6 +2313,7 @@ function App(){
     if(aiQuestion) return;
     const correct=i===q.correct;
     recordPlanAnswer(q.id,correct);
+    recordReview(q.id,correct);
     const newScore=correct?score+1:score;
     const newWrong=correct?wrong:[...wrong,{...q,chosen:i}];
     if(correct) setScore(newScore); else setWrong(newWrong);
@@ -2591,6 +2681,121 @@ function App(){
 
   // ===== Home =====
   // ===== Study-plan screen (central navigation) =====
+  // ===== Learning-journey dashboard =====
+  if(phase==="parcours"){
+    const j=journey;
+    const Bar=({pct,color})=>(<div style={{height:8,background:TRACK_BG,borderRadius:4,overflow:"hidden"}}><div style={{height:"100%",width:`${Math.max(0,Math.min(100,pct))}%`,background:color||BLUE,borderRadius:4,transition:"width .5s"}}/></div>);
+    const bigTile=(label,value,sub)=>(
+      <div style={{flex:"1 1 0",minWidth:0,background:CARD,border:"1px solid "+LINE,borderRadius:16,padding:"16px 14px",textAlign:"center",boxShadow:SHADOW_XS}}>
+        <div style={{fontSize:24,fontWeight:700,letterSpacing:"-0.03em",color:INK}}>{value}</div>
+        <div style={{fontSize:12,color:GREY,marginTop:3}}>{label}</div>
+        {sub&&<div style={{fontSize:11,color:GREY,marginTop:1}}>{sub}</div>}
+      </div>
+    );
+    const skillColor=(pct)=> pct>=80?GREEN:pct>=50?BLUE:AMBER_TEXT;
+    return (
+      <div style={{minHeight:"100vh",background:BG}}>
+        <header style={{position:"sticky",top:0,zIndex:10,background:OVERLAY,backdropFilter:"blur(20px)",borderBottom:"1px solid "+LINE,padding:"calc(env(safe-area-inset-top) + 12px) 22px 12px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <button className="text-btn" onClick={()=>setPhase("home")} style={{background:"none",border:"none",color:BLUE,fontSize:16,padding:0,display:"flex",alignItems:"center",gap:2}}><ChevronLeft size={19}/>Accueil</button>
+          <span style={{fontSize:15,color:INK,fontWeight:600}}>Mon parcours</span>
+          <div style={{width:64}}/>
+        </header>
+        <main ref={mainRef} tabIndex={-1} style={{outline:"none",maxWidth:600,margin:"0 auto",padding:"24px 22px 72px"}}>
+          {j.seenCount===0 ? (
+            <div className="fade" style={{textAlign:"center",padding:"32px 0"}}>
+              <TargetIcon size={30} style={{color:BLUE,margin:"0 auto 14px"}}/>
+              <h1 style={{fontSize:26,fontWeight:600,letterSpacing:"-0.03em",margin:"0 0 8px"}}>Ton parcours commence ici</h1>
+              <p style={{fontSize:16,color:GREY,lineHeight:1.5,margin:"0 0 22px"}}>Réponds à quelques questions et cet écran te montrera tes compétences maîtrisées, tes points faibles et tes révisions à venir.</p>
+              <PillButton onClick={()=>start("all","all")} style={{minWidth:200}}>Commencer</PillButton>
+            </div>
+          ) : (
+            <div className="fade">
+              {/* Journey summary */}
+              <div style={{display:"flex",gap:10,marginBottom:8}}>
+                {bigTile("Questions vues", j.seenCount, "/ "+j.total)}
+                {bigTile("Réussite", j.accuracy+"%")}
+                {bigTile("Maîtrisées", j.mastered)}
+              </div>
+
+              {/* Spaced review */}
+              <SectionLabel icon={RefreshIcon}>Révision espacée</SectionLabel>
+              <div style={{background:CARD,border:"1px solid "+(j.dueToday>0?BLUE:LINE),borderRadius:18,padding:"18px 20px",boxShadow:SHADOW_XS,marginBottom:26}}>
+                {j.dueToday>0 ? (
+                  <>
+                    <div style={{display:"flex",alignItems:"baseline",gap:8,marginBottom:14}}>
+                      <span style={{fontSize:30,fontWeight:700,letterSpacing:"-0.03em",color:BLUE}}>{j.dueToday}</span>
+                      <span style={{fontSize:15,color:INK}}>question{j.dueToday>1?"s":""} à réviser aujourd'hui</span>
+                    </div>
+                    <PillButton onClick={startReviewDue} style={{width:"100%"}}>Réviser maintenant</PillButton>
+                  </>
+                ) : j.nextDue ? (
+                  <div style={{display:"flex",alignItems:"center",gap:12}}>
+                    <div style={{width:40,height:40,borderRadius:11,background:GREEN_BG,color:GREEN_TEXT,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><CheckIcon size={20} stroke={2.5}/></div>
+                    <div>
+                      <div style={{fontSize:15,fontWeight:600,color:INK}}>À jour pour aujourd'hui</div>
+                      <div style={{fontSize:13,color:GREY,marginTop:1}}>Prochaine révision {j.nextDueIn<=0?"aujourd'hui":j.nextDueIn===1?"demain":"dans "+j.nextDueIn+" jours"} · {formatDateFr(j.nextDue)}</div>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{fontSize:14,color:GREY,lineHeight:1.5}}>Réponds à des questions et elles réapparaîtront ici, espacées dans le temps, pour ancrer ta mémoire.</div>
+                )}
+              </div>
+
+              {/* Weak areas */}
+              {j.weak.length>0&&(
+                <>
+                  <SectionLabel icon={TargetIcon}>À travailler</SectionLabel>
+                  <div style={{background:CARD,border:"1px solid "+LINE,borderRadius:18,padding:"8px 18px",boxShadow:SHADOW_XS,marginBottom:26}}>
+                    {j.weak.map((s,i,arr)=>(
+                      <div key={s.key} style={{padding:"13px 0",borderBottom:i<arr.length-1?"1px solid "+LINE:"none"}}>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:7}}>
+                          <span style={{fontSize:14.5,fontWeight:600,color:INK}}>{s.label}</span>
+                          <span style={{fontSize:13,color:AMBER_TEXT,fontWeight:600}}>{s.mastered}/{s.seen}</span>
+                        </div>
+                        <Bar pct={s.pct} color={AMBER_TEXT}/>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {/* Grammar skills */}
+              <SectionLabel icon={TypeIcon}>Compétences grammaticales</SectionLabel>
+              <div style={{fontSize:13,color:GREY,margin:"-6px 0 12px"}}>{j.masteredSkills} compétence{j.masteredSkills>1?"s":""} maîtrisée{j.masteredSkills>1?"s":""} sur {j.skillsWithData} travaillée{j.skillsWithData>1?"s":""}</div>
+              <div style={{background:CARD,border:"1px solid "+LINE,borderRadius:18,padding:"8px 18px",boxShadow:SHADOW_XS,marginBottom:26}}>
+                {j.skillList.filter(s=>s.seen>0).length===0 ? (
+                  <div style={{fontSize:14,color:GREY,padding:"10px 0",lineHeight:1.5}}>Fais quelques questions de « Structure de la langue » pour révéler tes compétences par thème.</div>
+                ) : j.skillList.filter(s=>s.seen>0).map((s,i,arr)=>(
+                  <div key={s.key} style={{padding:"13px 0",borderBottom:i<arr.length-1?"1px solid "+LINE:"none"}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:7}}>
+                      <span style={{fontSize:14.5,fontWeight:600,color:INK}}>{s.label}</span>
+                      <span style={{fontSize:13,color:GREY}}>{s.mastered}/{s.seen} · {s.pct}%</span>
+                    </div>
+                    <Bar pct={s.pct} color={skillColor(s.pct)}/>
+                  </div>
+                ))}
+              </div>
+
+              {/* By level */}
+              <SectionLabel icon={BookIcon}>Par niveau</SectionLabel>
+              <div style={{background:CARD,border:"1px solid "+LINE,borderRadius:18,padding:"8px 18px",boxShadow:SHADOW_XS}}>
+                {j.levels.map((l,i,arr)=>(
+                  <div key={l.level} style={{padding:"13px 0",borderBottom:i<arr.length-1?"1px solid "+LINE:"none"}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:7}}>
+                      <span style={{fontSize:12,fontWeight:700,letterSpacing:"0.03em",color:LEVEL_COLORS[l.level],background:LEVEL_BG[l.level],padding:"3px 9px",borderRadius:7}}>{l.level}</span>
+                      <span style={{fontSize:13,color:GREY}}>{l.mastered} maîtrisées · {l.seen}/{l.total} vues</span>
+                    </div>
+                    <Bar pct={l.total?Math.round(l.mastered/l.total*100):0} color={LEVEL_COLORS[l.level]}/>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </main>
+      </div>
+    );
+  }
+
   if(phase==="plan"){
     const chipStyle=(active)=>({padding:"10px 0",flex:"1 1 0",minWidth:54,textAlign:"center",borderRadius:12,border:"1px solid "+(active?BLUE:LINE),background:active?BLUE:CARD,color:active?"#fff":INK,fontSize:15,fontWeight:600});
     const statTile=(label,value,accent)=>(
@@ -2733,7 +2938,7 @@ function App(){
     // Resumable (non-review) session, surfaced as an explicit card in Pratique
     // so continuing is a first-class option, not only the hero button.
     const savedSession = hasSession ? (loadProgress()||{}).session : null;
-    const MODE_LABELS = { all:"Entraînement complet", grammar:"Structure de la langue", reading:"Compréhension écrite", random20:"Série de 20", rapid:"Mode rapide", level:"Par niveau", plan:"Séance du plan", aibank:"Questions IA" };
+    const MODE_LABELS = { all:"Entraînement complet", grammar:"Structure de la langue", reading:"Compréhension écrite", random20:"Série de 20", rapid:"Mode rapide", level:"Par niveau", plan:"Séance du plan", aibank:"Questions IA", reviewdue:"Révision du jour" };
     const resumable = (savedSession && Array.isArray(savedSession.order) && savedSession.order.length && savedSession.current < savedSession.order.length && !isReviewMode(savedSession.mode))
       ? { label: MODE_LABELS[savedSession.mode]||"Séance", current: savedSession.current, total: savedSession.order.length }
       : null;
@@ -2873,9 +3078,9 @@ function App(){
             </div>
 
             <div>
-              {/* Progression */}
-              <SectionLabel icon={TargetIcon}>Progression</SectionLabel>
-              <div className="fade" style={{background:CARD,border:"1px solid "+LINE,borderRadius:20,padding:"22px 22px",marginBottom:26}}>
+              {/* Parcours */}
+              <SectionLabel icon={TargetIcon}>Mon parcours</SectionLabel>
+              <div className="fade hcard" onClick={()=>setPhase("parcours")} role="button" tabIndex={0} onKeyDown={e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); setPhase("parcours"); } }} style={{background:CARD,border:"1px solid "+LINE,borderRadius:20,padding:"22px 22px",marginBottom:26,cursor:"pointer",boxShadow:SHADOW_XS}}>
                 <div style={{display:"flex",justifyContent:"space-around",textAlign:"center",marginBottom:18}}>
                   {[{v:pct+"%",l:"Réussite",I:TargetIcon},{v:mastered,l:"Maîtrisées",I:CheckIcon},{v:struggling,l:"À revoir",I:RefreshIcon}].map((s,i)=>(
                     <div key={i}>
@@ -2886,7 +3091,10 @@ function App(){
                   ))}
                 </div>
                 <div style={{height:5,background:TRACK_BG,borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",width:`${(mastered/ALL.length)*100}%`,background:BLUE,borderRadius:3,transition:"width .5s"}}/></div>
-                <div style={{fontSize:12,color:GREY,marginTop:10,textAlign:"center"}}>{Math.round((mastered/ALL.length)*100)}% du programme maîtrisé{stats.sessions>0?` · Meilleur score ${stats.bestPct}%`:""}</div>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:12}}>
+                  <span style={{fontSize:13,fontWeight:600,color:BLUE,display:"flex",alignItems:"center",gap:3}}>Voir mon parcours<ChevronRight size={15}/></span>
+                  {journey.dueToday>0&&<span style={{fontSize:12,fontWeight:600,color:BLUE,background:QUOTE_BG,padding:"4px 10px",borderRadius:8}}>{journey.dueToday} à réviser</span>}
+                </div>
               </div>
 
               {/* Intelligence */}
