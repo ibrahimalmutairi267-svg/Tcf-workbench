@@ -2992,6 +2992,11 @@ function App(){
 
   if(phase==="home"){
     const mastered=stats.masteredIds.length, struggling=stats.strugglingIds.length;
+    // Per-category mistake pools for the "Réviser mes erreurs" cards. These run
+    // as transient review sessions, so they never touch practice progress.
+    const strugSet=new Set(stats.strugglingIds);
+    const grammarMistakes=[...ALL,...aiBank].filter(x=>x.type==="grammar" && strugSet.has(x.id));
+    const readingMistakes=ALL.filter(x=>x.type==="reading" && strugSet.has(x.id));
     const pct=stats.lifetimeAnswered>0?Math.round((stats.lifetimeCorrect/stats.lifetimeAnswered)*100):0;
     // Resumable (non-review) session, surfaced as an explicit card in Pratique
     // so continuing is a first-class option, not only the hero button.
@@ -3127,10 +3132,32 @@ function App(){
                 </div>
               </div>
 
-              {struggling>0&&(
-                <div className="fade hcard" onClick={()=>{ const pool=shuffle([...ALL,...aiBank].filter(qq=>stats.strugglingIds.includes(qq.id))); startPool(pool,"struggling"); }} style={{background:CARD,border:"1px solid "+LINE,borderRadius:16,padding:"18px 20px",boxShadow:SHADOW_XS,marginBottom:16,display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}}>
-                  <div><div style={{fontSize:15,fontWeight:600,letterSpacing:"-0.01em"}}>Réviser mes erreurs</div><div style={{fontSize:13,color:GREY,marginTop:2}}>{struggling} question{struggling>1?"s":""} à revoir</div></div>
-                  <ChevronRight size={19} style={{color:BLUE}}/>
+              {(grammarMistakes.length>0||readingMistakes.length>0)&&(
+                <div className="fade" style={{display:"flex",flexDirection:"column",gap:10,marginBottom:16}}>
+                  {grammarMistakes.length>0&&(
+                    <div className="hcard" role="button" tabIndex={0} onClick={()=>startPool(shuffle(grammarMistakes),"struggling")} onKeyDown={e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); startPool(shuffle(grammarMistakes),"struggling"); } }} style={{background:CARD,border:"1px solid "+LINE,borderRadius:16,padding:"16px 20px",boxShadow:SHADOW_XS,display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer",gap:12}}>
+                      <div style={{display:"flex",alignItems:"center",gap:12,minWidth:0}}>
+                        <div style={{width:34,height:34,borderRadius:10,background:QUOTE_BG,color:BLUE,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><TypeIcon size={17}/></div>
+                        <div style={{minWidth:0}}>
+                          <div style={{fontSize:15,fontWeight:600,letterSpacing:"-0.01em",color:INK}}>Réviser mes erreurs · Grammaire</div>
+                          <div style={{fontSize:13,color:GREY,marginTop:1}}>{grammarMistakes.length} question{grammarMistakes.length>1?"s":""} à revoir</div>
+                        </div>
+                      </div>
+                      <ChevronRight size={19} style={{color:BLUE,flexShrink:0}}/>
+                    </div>
+                  )}
+                  {readingMistakes.length>0&&(
+                    <div className="hcard" role="button" tabIndex={0} onClick={()=>startPool(shuffle(readingMistakes),"struggling")} onKeyDown={e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); startPool(shuffle(readingMistakes),"struggling"); } }} style={{background:CARD,border:"1px solid "+LINE,borderRadius:16,padding:"16px 20px",boxShadow:SHADOW_XS,display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer",gap:12}}>
+                      <div style={{display:"flex",alignItems:"center",gap:12,minWidth:0}}>
+                        <div style={{width:34,height:34,borderRadius:10,background:QUOTE_BG,color:BLUE,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><BookIcon size={17}/></div>
+                        <div style={{minWidth:0}}>
+                          <div style={{fontSize:15,fontWeight:600,letterSpacing:"-0.01em",color:INK}}>Réviser mes erreurs · Compréhension</div>
+                          <div style={{fontSize:13,color:GREY,marginTop:1}}>{readingMistakes.length} question{readingMistakes.length>1?"s":""} à revoir</div>
+                        </div>
+                      </div>
+                      <ChevronRight size={19} style={{color:BLUE,flexShrink:0}}/>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
