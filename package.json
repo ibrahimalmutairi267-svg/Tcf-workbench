@@ -1,0 +1,19 @@
+{
+  "name": "tcf-workbench",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "TCF B2 training app — single self-contained index.html built from src/.",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "react": "18.2.0",
+    "react-dom": "18.2.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.2",
+    "vitest": "^2.1.8"
+  }
+}
