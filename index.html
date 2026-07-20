@@ -3121,11 +3121,12 @@ function App(){
                 <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
                   {LEVELS.map(lv=>{
                     const n=levelCounts[lv]||0;
+                    const ls=sessionMap["level:"+lv]; // each level keeps its own resumable progress
                     return (
                       <button key={lv} className="hcard" disabled={n===0} onClick={()=>start("level","all",lv)}
-                        style={{flex:"1 1 30%",minWidth:82,padding:"12px 8px",borderRadius:12,border:"1px solid "+(n?LEVEL_COLORS[lv]+"33":LINE),background:n?LEVEL_BG[lv]:BG,opacity:n?1:0.45,textAlign:"center",cursor:n?"pointer":"default"}}>
+                        style={{flex:"1 1 30%",minWidth:82,padding:"12px 8px",borderRadius:12,border:"1px solid "+(ls?LEVEL_COLORS[lv]:(n?LEVEL_COLORS[lv]+"33":LINE)),background:n?LEVEL_BG[lv]:BG,opacity:n?1:0.45,textAlign:"center",cursor:n?"pointer":"default"}}>
                         <div style={{fontSize:15,fontWeight:700,color:n?LEVEL_COLORS[lv]:GREY,letterSpacing:"-0.01em"}}>{lv}</div>
-                        <div style={{fontSize:11,color:GREY,marginTop:1}}>{n}</div>
+                        {ls ? <div style={{fontSize:11,fontWeight:600,color:LEVEL_COLORS[lv],marginTop:1}}>En cours · {(ls.current||0)+1}/{ls.order.length}</div> : <div style={{fontSize:11,color:GREY,marginTop:1}}>{n}</div>}
                       </button>
                     );
                   })}
