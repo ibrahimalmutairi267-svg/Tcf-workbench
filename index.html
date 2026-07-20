@@ -1479,7 +1479,18 @@ const REVIEW_MODES = ["struggling","revision"];
 const isReviewMode = (m)=>REVIEW_MODES.includes(m);
 
 function saveProgress(d){ try{ localStorage.setItem(STORE_KEY,JSON.stringify(d)); }catch(e){} }
-function loadProgress(){ try{ const r=localStorage.getItem(STORE_KEY); return r?JSON.parse(r):null; }catch(e){ return null; } }
+// Each practice category keeps its OWN in-progress session, keyed here, so
+// starting grammar never clobbers an in-progress reading session (and back).
+function sessionKeyOf(sess){ if(!sess||!sess.mode) return null; const m=sess.mode, cat=sess.cat||"all", lvl=sess.lvl||"all";
+  if(m==="level") return "level:"+lvl;
+  if(m==="plan"||m==="reviewdue"||m==="aibank"||m==="rapid") return m;
+  return m+":"+cat; }
+function loadProgress(){ try{ const r=localStorage.getItem(STORE_KEY); const o=r?JSON.parse(r):null; if(!o) return null;
+  if(!o.sessionMap||typeof o.sessionMap!=="object"){ // migrate legacy single-session shape
+    const map={}; if(o.session){ const k=sessionKeyOf(o.session); if(k){ map[k]=o.session; o.lastKey=k; } } o.sessionMap=map;
+  }
+  delete o.session; if(!("lastKey" in o)) o.lastKey=null; return o;
+}catch(e){ return null; } }
 function getWorkerUrl(){ try{ return localStorage.getItem(WORKER_KEY)||DEFAULT_WORKER; }catch(e){ return DEFAULT_WORKER; } }
 function setWorkerUrl(u){ try{ u?localStorage.setItem(WORKER_KEY,u):localStorage.removeItem(WORKER_KEY); }catch(e){} }
 function isCustomWorker(){ try{ return !!localStorage.getItem(WORKER_KEY); }catch(e){ return false; } }
@@ -2133,7 +2144,11 @@ function App(){
   const [phase,setPhase]=useState("home");
   const [mode,setMode]=useState("all");
   const [stats,setStats]=useState(emptyStats);
-  const [hasSession,setHasSession]=useState(false);
+  const [sessionMap,setSessionMap]=useState({}); // per-category resumable sessions
+  const [lastKey,setLastKey]=useState(null);     // most recently active session (hero "Reprendre")
+  const [sessKey,setSessKey]=useState(null);     // key of the session currently being played
+  const hasSession = !!(lastKey && sessionMap[lastKey]);
+  const writeSessions=(map,last,ns)=>{ const st=ns||stats; setSessionMap(map); setLastKey(last); saveProgress({stats:st, sessionMap:map, lastKey:last}); };
   const [aiQuestion,setAiQuestion]=useState(null);
   const [aiLoading,setAiLoading]=useState(false);
   const [aiError,setAiError]=useState("");
@@ -2167,14 +2182,14 @@ function App(){
       // Only offer "Reprendre" if the saved session still resolves to real
       // questions with a valid position; otherwise drop it so a stale session
       // can't leave the resume button pointing at nothing.
-      if(s.session && Array.isArray(s.session.order)){
-        // Resumable as long as at least one question still resolves; the
-        // position is clamped into range at resume time. Only a fully broken
-        // (or empty) session is dropped.
-        const qs=resolveSessionOrder(s.session.order, ALL, bank);
-        if(qs.length>0) setHasSession(true);
-        else saveProgress({stats:s.stats||emptyStats, session:null});
-      }
+      // Keep only sessions that still resolve to real questions (drops stale
+      // ones so "Reprendre" can't land on a blank screen).
+      const map=s.sessionMap||{}; const valid={};
+      for(const k in map){ if(map[k]&&resolveSessionOrder(map[k].order, ALL, bank).length>0) valid[k]=map[k]; }
+      const last=(s.lastKey&&valid[s.lastKey])?s.lastKey:(Object.keys(valid)[0]||null);
+      setSessionMap(valid); setLastKey(last);
+      // Canonicalise storage (drops any legacy single-session field and stale keys).
+      saveProgress({stats:s.stats||emptyStats, sessionMap:valid, lastKey:last});
     }
     const rawPlan=loadPlan(); if(rawPlan){ const np=refreshPlanToday(normalizePlan(rawPlan, ALL.map(x=>x.id))); setPlan(np); savePlan(np); }
   },[]);
@@ -2247,10 +2262,12 @@ function App(){
 
   const startPool=(pool,m)=>{
     if(!pool.length) return;
-    setMode(m); setQuestions(pool); setCurrent(0); setSelected(null); setScore(0); setWrong([]); resetDeepExpl(); setAiQuestion(null); setPhase("quiz");
-    // A review session runs in-memory only; it neither becomes the resumable
-    // session nor disturbs the one already saved.
-    if(!isReviewMode(m)){ setHasSession(true); saveProgress({stats,session:{order:pool.map(x=>x.id),current:0,score:0,wrong:[],mode:m}}); }
+    const review=isReviewMode(m);
+    const key=review?null:sessionKeyOf({mode:m});
+    setMode(m); setSessKey(key); setQuestions(pool); setCurrent(0); setSelected(null); setScore(0); setWrong([]); resetDeepExpl(); setAiQuestion(null); setPhase("quiz");
+    // A review session runs in-memory only; it neither becomes a resumable
+    // session nor disturbs any already saved.
+    if(!review){ const sess={order:pool.map(x=>x.id),current:0,score:0,wrong:[],mode:m,cat:"all",lvl:"all"}; writeSessions({...sessionMap,[key]:sess}, key); }
   };
   const startPlanSession=()=>{ if(pv) startPool(pv.todayQueue.map(id=>ALL[id]).filter(Boolean),"plan"); };
   const startContinueAhead=()=>{ if(pv) startPool(pv.nextQueue.map(id=>ALL[id]).filter(Boolean),"plan"); };
@@ -2308,22 +2325,24 @@ function App(){
       savePlan(np); return np;
     });
   };
-  const persist=(ns,session)=>saveProgress({stats:ns,session:session||null});
   const findById=(id)=>{ const fromAll=(typeof id==="number")?ALL[id]:undefined; return fromAll!==undefined?fromAll:aiBank.find(a=>a.id===id); };
-  const resumeSession=()=>{
-    const s=loadProgress();
-    if(!s||!s.session||!Array.isArray(s.session.order)){ setHasSession(false); return; }
-    const x=s.session;
-    const qs=x.order.map(findById).filter(Boolean);
-    // Unresumable (all ids stale / empty): clear it and stay home rather than
-    // rendering a blank quiz.
-    if(qs.length===0){ setHasSession(false); saveProgress({stats, session:null}); setPhase("home"); return; }
-    const cur=Math.max(0, Math.min(x.current||0, qs.length-1)); // clamp so it can't overshoot a shortened pool
-    setQuestions(qs); setCurrent(cur); setScore(Math.min(x.score||0, qs.length)); setWrong(Array.isArray(x.wrong)?x.wrong:[]); setMode(x.mode||"all"); setSelected(null); resetDeepExpl(); setAiQuestion(null); setPhase("quiz");
+  const resumeSession=()=>{ if(lastKey) resumeKey(lastKey); };
+  // Resume an existing saved session by key, clamping the position into range.
+  const resumeKey=(key)=>{
+    const sess=key&&sessionMap[key];
+    if(!sess||!Array.isArray(sess.order)) return;
+    const qs=sess.order.map(findById).filter(Boolean);
+    if(qs.length===0){ const m={...sessionMap}; delete m[key]; writeSessions(m, lastKey===key?(Object.keys(m)[0]||null):lastKey); setPhase("home"); return; }
+    const cur=Math.max(0,Math.min(sess.current||0, qs.length-1));
+    setSessKey(key); setMode(sess.mode||"all"); setQuestions(qs); setCurrent(cur); setScore(Math.min(sess.score||0, qs.length)); setWrong(Array.isArray(sess.wrong)?sess.wrong:[]); setSelected(null); resetDeepExpl(); setAiQuestion(null); setPhase("quiz");
+    if(lastKey!==key) writeSessions(sessionMap, key); // resumed session becomes the most recent
   };
-  const startAIBank=()=>{ if(aiBank.length===0) return; setMode("aibank"); const pool=shuffle(aiBank); setQuestions(pool); setCurrent(0); setSelected(null); setScore(0); setWrong([]); resetDeepExpl(); setAiQuestion(null); setPhase("quiz"); setHasSession(true); saveProgress({stats,session:{order:pool.map(x=>x.id),current:0,score:0,wrong:[],mode:"aibank"}}); };
-  const start=(m,cat="all",lvl="all")=>{
-    setMode(m);
+  const startAIBank=()=>{ if(aiBank.length===0) return; if(sessionMap["aibank"]){ resumeKey("aibank"); return; } const pool=shuffle(aiBank); const sess={order:pool.map(x=>x.id),current:0,score:0,wrong:[],mode:"aibank",cat:"all",lvl:"all"}; setMode("aibank"); setSessKey("aibank"); setQuestions(pool); setCurrent(0); setSelected(null); setScore(0); setWrong([]); resetDeepExpl(); setAiQuestion(null); setPhase("quiz"); writeSessions({...sessionMap,aibank:sess}, "aibank"); };
+  // Clicking a practice category RESUMES its own session if one is in progress,
+  // otherwise starts it fresh. Pass {fresh:true} to force a restart.
+  const start=(m,cat="all",lvl="all",opts)=>{
+    const key=sessionKeyOf({mode:m,cat,lvl});
+    if((!opts||!opts.fresh) && key && sessionMap[key]){ resumeKey(key); return; }
     let pool;
     if(m==="rapid"){
       const readingPool=shuffle(ALL.filter(x=>x.type==="reading")).slice(0,15);
@@ -2335,8 +2354,9 @@ function App(){
       const base=cat==="all"?ALL:ALL.filter(x=>x.type===cat);
       pool=m==="random20"?shuffle(base).slice(0,20):shuffle(base);
     }
-    setQuestions(pool); setCurrent(0); setSelected(null); setScore(0); setWrong([]); resetDeepExpl(); setAiQuestion(null); setPhase("quiz"); setHasSession(true);
-    saveProgress({stats,session:{order:pool.map(q=>q.id),current:0,score:0,wrong:[],mode:m,cat,lvl}});
+    const sess={order:pool.map(q=>q.id),current:0,score:0,wrong:[],mode:m,cat,lvl};
+    setMode(m); setSessKey(key); setQuestions(pool); setCurrent(0); setSelected(null); setScore(0); setWrong([]); resetDeepExpl(); setAiQuestion(null); setPhase("quiz");
+    writeSessions(key?{...sessionMap,[key]:sess}:sessionMap, key||lastKey);
   };
 
   const q=aiQuestion||questions[current];
@@ -2358,23 +2378,24 @@ function App(){
     if(correct){ mastered.add(q.id); struggling.delete(q.id);} else { struggling.add(q.id); mastered.delete(q.id);} 
     const ns={...stats,lifetimeCorrect:stats.lifetimeCorrect+(correct?1:0),lifetimeAnswered:stats.lifetimeAnswered+1,masteredIds:[...mastered],strugglingIds:[...struggling]};
     setStats(ns);
-    // Review sessions save stats but leave the resumable session untouched.
-    if(isReviewMode(mode)){ const prev=loadProgress(); persist(ns, prev&&prev.session?prev.session:null); }
-    else persist(ns,{order:questions.map(x=>x.id),current,score:newScore,wrong:newWrong,mode});
+    // Review sessions save stats only; the active category session is updated
+    // under its own key so switching categories never overwrites another's.
+    if(isReviewMode(mode)||!sessKey){ saveProgress({stats:ns, sessionMap, lastKey}); }
+    else { const sess={...(sessionMap[sessKey]||{mode,cat:"all",lvl:"all"}), order:questions.map(x=>x.id), current, score:newScore, wrong:newWrong}; writeSessions({...sessionMap,[sessKey]:sess}, sessKey, ns); }
   }
   function next(){
     setAiQuestion(null); resetDeepExpl();
     const review=isReviewMode(mode);
     if(current+1>=total){
       const pct=Math.round((score/total)*100); const fs={...stats,sessions:stats.sessions+1,bestPct:Math.max(stats.bestPct,pct)}; setStats(fs);
-      if(review){ const prev=loadProgress(); persist(fs, prev&&prev.session?prev.session:null); }
-      else { persist(fs,null); setHasSession(false); }
+      if(review||!sessKey){ saveProgress({stats:fs, sessionMap, lastKey}); }
+      else { const m={...sessionMap}; delete m[sessKey]; const nl=lastKey===sessKey?(Object.keys(m)[0]||null):lastKey; writeSessions(m, nl, fs); setSessKey(null); }
       setPhase("result");
     }
     else {
       const nc=current+1; setCurrent(nc); setSelected(null);
-      if(review){ const prev=loadProgress(); persist(stats, prev&&prev.session?prev.session:null); }
-      else persist(stats,{order:questions.map(x=>x.id),current:nc,score,wrong,mode});
+      if(review||!sessKey){ saveProgress({stats, sessionMap, lastKey}); }
+      else { const sess={...(sessionMap[sessKey]||{mode,cat:"all",lvl:"all"}), order:questions.map(x=>x.id), current:nc, score, wrong}; writeSessions({...sessionMap,[sessKey]:sess}, sessKey); }
     }
   }
   async function generateAIQuestion(){
@@ -2659,7 +2680,7 @@ function App(){
                 <div style={{fontSize:15,fontWeight:600,color:INK}}>Progression</div>
                 <div style={{fontSize:13,color:GREY,marginTop:2}}>{stats.lifetimeAnswered} question{stats.lifetimeAnswered>1?"s":""} répondue{stats.lifetimeAnswered>1?"s":""} au total</div>
               </div>
-              <button className="text-btn" onClick={()=>{ if(confirm("Réinitialiser toute ta progression ?")){ setStats(emptyStats); setHasSession(false); saveProgress({stats:emptyStats,session:null}); } }} style={{background:"none",border:"none",color:RED,fontSize:14,whiteSpace:"nowrap"}}>Réinitialiser</button>
+              <button className="text-btn" onClick={()=>{ if(confirm("Réinitialiser toute ta progression ?")){ setStats(emptyStats); writeSessions({}, null, emptyStats); } }} style={{background:"none",border:"none",color:RED,fontSize:14,whiteSpace:"nowrap"}}>Réinitialiser</button>
             </div>}
             {!plan&&aiBank.length===0&&stats.lifetimeAnswered===0&&!hasSession&&<div style={{fontSize:14,color:GREY,padding:"4px 2px"}}>Rien à afficher pour l'instant — commence à réviser pour voir ta progression ici.</div>}
           </div>
@@ -2974,7 +2995,7 @@ function App(){
     const pct=stats.lifetimeAnswered>0?Math.round((stats.lifetimeCorrect/stats.lifetimeAnswered)*100):0;
     // Resumable (non-review) session, surfaced as an explicit card in Pratique
     // so continuing is a first-class option, not only the hero button.
-    const savedSession = hasSession ? (loadProgress()||{}).session : null;
+    const savedSession = lastKey ? sessionMap[lastKey] : null;
     const MODE_LABELS = { all:"Entraînement complet", grammar:"Structure de la langue", reading:"Compréhension écrite", random20:"Série de 20", rapid:"Mode rapide", level:"Par niveau", plan:"Séance du plan", aibank:"Questions IA", reviewdue:"Révision du jour" };
     const resumable = (savedSession && Array.isArray(savedSession.order) && savedSession.order.length && savedSession.current < savedSession.order.length && !isReviewMode(savedSession.mode))
       ? { label: MODE_LABELS[savedSession.mode]||"Séance", current: savedSession.current, total: savedSession.order.length }
@@ -3006,7 +3027,7 @@ function App(){
             <PillButton onClick={heroCta.fn} style={{minWidth:220}}>{heroCta.label}</PillButton>
             <div style={{display:"flex",gap:18,justifyContent:"center",marginTop:16,flexWrap:"wrap"}}>
               <button className="text-btn" onClick={()=>start("rapid")} style={{background:"none",border:"none",color:GREY,fontSize:14,fontWeight:500}}>Mode rapide</button>
-              {hasSession&&<button className="text-btn" onClick={()=>start("all","all")} style={{background:"none",border:"none",color:GREY,fontSize:14}}>Recommencer depuis le début</button>}
+              {hasSession&&<button className="text-btn" onClick={()=>start("all","all",{fresh:true})} style={{background:"none",border:"none",color:GREY,fontSize:14}}>Recommencer depuis le début</button>}
             </div>
           </div>
 
@@ -3075,12 +3096,12 @@ function App(){
                 <button className="hcard" onClick={()=>start("all","grammar")} style={{flex:"1 1 30%",minWidth:140,background:CARD,border:"1px solid "+LINE,borderRadius:16,padding:"18px 16px",textAlign:"left",boxShadow:SHADOW_XS}}>
                   <div style={{width:32,height:32,borderRadius:9,background:QUOTE_BG,color:BLUE,display:"flex",alignItems:"center",justifyContent:"center",marginBottom:11}}><TypeIcon size={17}/></div>
                   <div style={{fontSize:15,fontWeight:600,letterSpacing:"-0.01em",color:INK,marginBottom:2}}>Structure de la langue</div>
-                  <div style={{fontSize:13,color:GREY}}>{GRAMMAR_COUNT} questions</div>
+                  {sessionMap["all:grammar"] ? <div style={{fontSize:13,color:BLUE,fontWeight:600}}>En cours · {(sessionMap["all:grammar"].current||0)+1}/{sessionMap["all:grammar"].order.length}</div> : <div style={{fontSize:13,color:GREY}}>{GRAMMAR_COUNT} questions</div>}
                 </button>
                 <button className="hcard" onClick={()=>start("all","reading")} style={{flex:"1 1 30%",minWidth:140,background:CARD,border:"1px solid "+LINE,borderRadius:16,padding:"18px 16px",textAlign:"left",boxShadow:SHADOW_XS}}>
                   <div style={{width:32,height:32,borderRadius:9,background:QUOTE_BG,color:BLUE,display:"flex",alignItems:"center",justifyContent:"center",marginBottom:11}}><BookIcon size={17}/></div>
                   <div style={{fontSize:15,fontWeight:600,letterSpacing:"-0.01em",color:INK,marginBottom:2}}>Compréhension écrite</div>
-                  <div style={{fontSize:13,color:GREY}}>{READING_COUNT} questions</div>
+                  {sessionMap["all:reading"] ? <div style={{fontSize:13,color:BLUE,fontWeight:600}}>En cours · {(sessionMap["all:reading"].current||0)+1}/{sessionMap["all:reading"].order.length}</div> : <div style={{fontSize:13,color:GREY}}>{READING_COUNT} questions</div>}
                 </button>
                 <button className="hcard" onClick={()=>start("rapid")} style={{flex:"1 1 30%",minWidth:140,background:CARD,border:"1px solid "+LINE,borderRadius:16,padding:"18px 16px",textAlign:"left",boxShadow:SHADOW_XS}}>
                   <div style={{width:32,height:32,borderRadius:9,background:QUOTE_BG,color:BLUE,display:"flex",alignItems:"center",justifyContent:"center",marginBottom:11}}><ZapIcon size={17}/></div>
