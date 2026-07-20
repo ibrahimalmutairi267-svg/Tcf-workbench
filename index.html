@@ -1647,6 +1647,15 @@ function nextReviewEntry(prev, correct){
 }
 function daysUntilKey(key){ return Math.round((keyToDate(key)-keyToDate(todayKey()))/86400000); }
 
+// Resolve a saved session's id list to real questions, dropping any id that
+// no longer exists (e.g. progress saved before the bank changed). Used to
+// decide whether a session is actually resumable — a partially-broken order
+// must never leave "Reprendre" pointing at a blank screen.
+function resolveSessionOrder(order, allArr, aiBankArr){
+  if(!Array.isArray(order)) return [];
+  return order.map(id => (typeof id==="number") ? allArr[id] : (aiBankArr||[]).find(a=>a&&a.id===id)).filter(Boolean);
+}
+
 // Topic pool for AI-generated grammar questions, to force variety instead of
 // letting the model default to its single most likely pattern (in practice,
 // "si" hypothetical clauses, almost every time, if left unconstrained).
@@ -2150,7 +2159,25 @@ function App(){
   const mainRef=useRef(null);
   const screenKey=showSettings?"settings":showTutor?"tutor":phase;
 
-  useEffect(()=>{ const s=loadProgress(); if(s){ setStats(s.stats||emptyStats); if(s.session&&s.session.order&&s.session.current<s.session.order.length) setHasSession(true); } setAiBank(loadAiBank()); setReview(loadReview()); const rawPlan=loadPlan(); if(rawPlan){ const np=refreshPlanToday(normalizePlan(rawPlan, ALL.map(x=>x.id))); setPlan(np); savePlan(np); } },[]);
+  useEffect(()=>{
+    const s=loadProgress();
+    const bank=loadAiBank(); setAiBank(bank); setReview(loadReview());
+    if(s){
+      setStats(s.stats||emptyStats);
+      // Only offer "Reprendre" if the saved session still resolves to real
+      // questions with a valid position; otherwise drop it so a stale session
+      // can't leave the resume button pointing at nothing.
+      if(s.session && Array.isArray(s.session.order)){
+        // Resumable as long as at least one question still resolves; the
+        // position is clamped into range at resume time. Only a fully broken
+        // (or empty) session is dropped.
+        const qs=resolveSessionOrder(s.session.order, ALL, bank);
+        if(qs.length>0) setHasSession(true);
+        else saveProgress({stats:s.stats||emptyStats, session:null});
+      }
+    }
+    const rawPlan=loadPlan(); if(rawPlan){ const np=refreshPlanToday(normalizePlan(rawPlan, ALL.map(x=>x.id))); setPlan(np); savePlan(np); }
+  },[]);
 
   useEffect(()=>{
     saveReduceMotion(reduceMotion);
@@ -2283,7 +2310,17 @@ function App(){
   };
   const persist=(ns,session)=>saveProgress({stats:ns,session:session||null});
   const findById=(id)=>{ const fromAll=(typeof id==="number")?ALL[id]:undefined; return fromAll!==undefined?fromAll:aiBank.find(a=>a.id===id); };
-  const resumeSession=()=>{ const s=loadProgress(); if(s&&s.session){ const x=s.session; const qs=x.order.map(findById).filter(Boolean); setQuestions(qs); setCurrent(x.current); setScore(x.score); setWrong(x.wrong||[]); setMode(x.mode||"all"); setSelected(null); resetDeepExpl(); setPhase("quiz"); } };
+  const resumeSession=()=>{
+    const s=loadProgress();
+    if(!s||!s.session||!Array.isArray(s.session.order)){ setHasSession(false); return; }
+    const x=s.session;
+    const qs=x.order.map(findById).filter(Boolean);
+    // Unresumable (all ids stale / empty): clear it and stay home rather than
+    // rendering a blank quiz.
+    if(qs.length===0){ setHasSession(false); saveProgress({stats, session:null}); setPhase("home"); return; }
+    const cur=Math.max(0, Math.min(x.current||0, qs.length-1)); // clamp so it can't overshoot a shortened pool
+    setQuestions(qs); setCurrent(cur); setScore(Math.min(x.score||0, qs.length)); setWrong(Array.isArray(x.wrong)?x.wrong:[]); setMode(x.mode||"all"); setSelected(null); resetDeepExpl(); setAiQuestion(null); setPhase("quiz");
+  };
   const startAIBank=()=>{ if(aiBank.length===0) return; setMode("aibank"); const pool=shuffle(aiBank); setQuestions(pool); setCurrent(0); setSelected(null); setScore(0); setWrong([]); resetDeepExpl(); setAiQuestion(null); setPhase("quiz"); setHasSession(true); saveProgress({stats,session:{order:pool.map(x=>x.id),current:0,score:0,wrong:[],mode:"aibank"}}); };
   const start=(m,cat="all",lvl="all")=>{
     setMode(m);
